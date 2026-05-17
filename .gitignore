@@ -44,3 +44,7 @@ htmlcov/
 transcripts.md
 output/
 links.txt
+bin/yt-transcript-md
+coverage.out
+.gitignore
+GEMINI.md

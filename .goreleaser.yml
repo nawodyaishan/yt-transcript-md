@@ -1,0 +1,63 @@
+version: 2
+
+project_name: yt-transcript-md
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: yt-transcript-md
+    main: ./cmd/yt-transcript-md
+    binary: yt-transcript-md
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    ldflags:
+      - >-
+        -s -w
+        -X github.com/nawodyaishan/yt-transcript-md/internal/version.Version={{ .Version }}
+        -X github.com/nawodyaishan/yt-transcript-md/internal/version.Commit={{ .ShortCommit }}
+        -X github.com/nawodyaishan/yt-transcript-md/internal/version.Date={{ .Date }}
+        -X github.com/nawodyaishan/yt-transcript-md/internal/version.GoVersion={{ .Env.GOVERSION }}
+
+archives:
+  - id: default
+    formats:
+      - tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+
+brews:
+  - repository:
+      owner: nawodyaishan
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/nawodyaishan/yt-transcript-md"
+    description: "Export available YouTube transcripts to Markdown"
+    license: MIT
+    test: |
+      system "#{bin}/yt-transcript-md", "--help"
+      system "#{bin}/yt-transcript-md", "version"
+    install: |
+      bin.install "yt-transcript-md"

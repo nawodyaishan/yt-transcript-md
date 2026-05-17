@@ -1,39 +1,47 @@
-.PHONY: help sync format lint typecheck test check build clean
+.PHONY: help tidy tidy-check mod-verify vet lint test build verify clean tag
 
 help:
 	@echo "Available targets:"
-	@echo "  sync       Install project and development dependencies"
-	@echo "  format     Format source and tests with Ruff"
-	@echo "  lint       Lint source and tests with Ruff"
-	@echo "  typecheck  Type check source with mypy"
-	@echo "  test       Run the test suite"
-	@echo "  check      Run format check, lint, typecheck, and tests"
-	@echo "  build      Build package distributions"
-	@echo "  clean      Remove generated caches and build artifacts"
+	@echo "  tidy       Run go mod tidy"
+	@echo "  tidy-check Check for go mod tidy drift"
+	@echo "  mod-verify Verify go modules"
+	@echo "  vet        Run go vet"
+	@echo "  lint       Run golangci-lint"
+	@echo "  test       Run tests"
+	@echo "  build      Build binary"
+	@echo "  verify     Run all quality checks"
+	@echo "  clean      Remove build artifacts"
+	@echo "  tag        Tag a new version (use V=v0.1.0 MSG=\"...\")"
 
-sync:
-	uv sync --all-groups
+tidy:
+	./scripts/tidy.sh
 
-format:
-	uv run ruff format .
+tidy-check:
+	./scripts/tidy-check.sh
+
+mod-verify:
+	./scripts/mod-verify.sh
+
+vet:
+	./scripts/vet.sh
 
 lint:
-	uv run ruff check .
-
-typecheck:
-	uv run mypy src
+	./scripts/lint.sh
 
 test:
-	uv run pytest
-
-check:
-	uv run ruff format --check .
-	uv run ruff check .
-	uv run mypy src
-	uv run pytest
+	./scripts/test.sh
 
 build:
-	uv build
+	./scripts/build.sh
+
+verify:
+	./scripts/verify.sh
 
 clean:
-	rm -rf build dist htmlcov .coverage .coverage.* .pytest_cache .mypy_cache .ruff_cache *.egg-info
+	./scripts/clean.sh
+
+tag:
+	@if [ -z "$(V)" ]; then echo "V is required (e.g. V=v0.1.0)"; exit 1; fi
+	@if [ -z "$(MSG)" ]; then echo "MSG is required"; exit 1; fi
+	git tag -a $(V) -m "$(MSG)"
+	@echo "Tagged $(V)"
