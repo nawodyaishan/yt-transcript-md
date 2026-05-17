@@ -1,4 +1,4 @@
-.PHONY: help tidy tidy-check mod-verify vet lint test build verify clean tag
+.PHONY: help tidy tidy-check mod-verify vet lint test build verify clean tag release
 
 help:
 	@echo "Available targets:"
@@ -12,6 +12,7 @@ help:
 	@echo "  verify     Run all quality checks"
 	@echo "  clean      Remove build artifacts"
 	@echo "  tag        Tag a new version (use V=v0.1.0 MSG=\"...\")"
+	@echo "  release    Verify, tag, and push a release (use V=v0.1.0 MSG=\"...\")"
 
 tidy:
 	./scripts/tidy.sh
@@ -45,3 +46,6 @@ tag:
 	@if [ -z "$(MSG)" ]; then echo "MSG is required"; exit 1; fi
 	git tag -a $(V) -m "$(MSG)"
 	@echo "Tagged $(V)"
+
+release:
+	@V="$(V)" MSG="$(MSG)" ./scripts/release.sh
