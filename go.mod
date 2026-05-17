@@ -1,6 +1,6 @@
 module github.com/nawodyaishan/yt-transcript-md
 
-go 1.26.3
+go 1.24
 
 require (
 	github.com/horiagug/youtube-transcript-api-go v0.0.13

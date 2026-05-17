@@ -33,10 +33,10 @@ jobs:
           version: latest
 
       - name: Test
-        run: make test-go
+        run: make test
 
       - name: Build
-        run: make build-go
+        run: make build
 
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
