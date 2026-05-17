@@ -1,0 +1,137 @@
+package app
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/nawodyaishan/yt-transcript-md/internal/input"
+	"github.com/nawodyaishan/yt-transcript-md/internal/markdown"
+	"github.com/nawodyaishan/yt-transcript-md/internal/models"
+	"github.com/nawodyaishan/yt-transcript-md/internal/transcript"
+)
+
+// ExportOptions represents the options for the export command.
+type ExportOptions struct {
+	Links              string
+	InputFile          string
+	Out                string
+	Languages          string
+	Timestamps         bool
+	PreserveFormatting bool
+	Retries            int
+	RetryDelaySeconds  float64
+	Strict             bool
+}
+
+// Export orchestrates the fetching and rendering of transcripts.
+func Export(ctx context.Context, opts ExportOptions, provider transcript.Provider, log io.Writer) error {
+	rawInput, err := readRawInput(opts)
+	if err != nil {
+		return err
+	}
+
+	videos, err := input.ParseVideoInputs(rawInput)
+	if err != nil {
+		return fmt.Errorf("input error: %w", err)
+	}
+
+	if len(videos) == 0 {
+		return fmt.Errorf("no valid YouTube links or video IDs provided")
+	}
+
+	languagePriority := parseLanguages(opts.Languages)
+	fetchOpts := transcript.FetchOptions{
+		Languages:          languagePriority,
+		PreserveFormatting: opts.PreserveFormatting,
+		Retries:            opts.Retries,
+		RetryDelaySeconds:  opts.RetryDelaySeconds,
+	}
+
+	var documents []models.TranscriptDocument
+	var failures []models.FailedVideo
+
+	_, _ = fmt.Fprintf(log, "Fetching transcripts for %d video(s)...\n", len(videos))
+
+	for _, video := range videos {
+		doc, err := provider.Fetch(ctx, video, fetchOpts)
+		if err != nil {
+			failures = append(failures, models.FailedVideo{
+				Original: video.Original,
+				Reason:   err.Error(),
+			})
+			_, _ = fmt.Fprintf(log, "✗ %s: %v\n", video.VideoID, err)
+			if opts.Strict {
+				break
+			}
+			continue
+		}
+
+		documents = append(documents, doc)
+		_, _ = fmt.Fprintf(log, "✓ %s\n", video.VideoID)
+	}
+
+	md := markdown.Render(documents, failures, markdown.Options{
+		IncludeTimestamps: opts.Timestamps,
+	})
+
+	if err := writeOutputFile(opts.Out, md); err != nil {
+		return fmt.Errorf("failed to write output: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(log, "\nWrote Markdown: %s\n", opts.Out)
+
+	if opts.Strict && len(failures) > 0 {
+		return fmt.Errorf("strict mode: %d videos failed", len(failures))
+	}
+
+	return nil
+}
+
+func readRawInput(opts ExportOptions) (string, error) {
+	var parts []string
+
+	if opts.Links != "" {
+		parts = append(parts, opts.Links)
+	}
+
+	if opts.InputFile != "" {
+		data, err := os.ReadFile(opts.InputFile)
+		if err != nil {
+			return "", fmt.Errorf("input file not found: %w", err)
+		}
+		parts = append(parts, string(data))
+	}
+
+	if len(parts) == 0 {
+		return "", fmt.Errorf("provide --links or --input-file")
+	}
+
+	return strings.Join(parts, "\n"), nil
+}
+
+func parseLanguages(raw string) []string {
+	var result []string
+	parts := strings.Split(raw, ",")
+	for _, p := range parts {
+		trimmed := strings.TrimSpace(p)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	if len(result) == 0 {
+		return []string{"en"}
+	}
+	return result
+}
+
+func writeOutputFile(path string, content string) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(content), 0644)
+}
