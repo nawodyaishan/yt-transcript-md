@@ -1,50 +1,49 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-
-# Distribution and packaging
+# Binaries and build output
+bin/
 build/
 dist/
-*.egg-info/
-*.egg
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
 
-# Virtual environments
-.venv/
-venv/
-env/
-ENV/
+# Go coverage, profiling, and fuzz output
+coverage.out
+*.coverprofile
+*.prof
+*.pprof
+testdata/fuzz/
 
-# uv
-.uv-cache/
-
-# Test and coverage output
-.coverage
-.coverage.*
-coverage.xml
-htmlcov/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-
-# Local environment
-.env
-.env.*
-!.env.example
-.python-version.local
-
-# Editor and OS files
-.DS_Store
-.idea/
-.vscode/
+# Go workspace and local caches
+go.work
+go.work.sum
+.cache/
 
 # Project output
 transcripts.md
 output/
 links.txt
-bin/yt-transcript-md
-coverage.out
-.gitignore
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+# Python/test helper caches
+__pycache__/
+*.py[cod]
+.coverage
+.coverage.*
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Editor and OS files
+.DS_Store
+.idea/
+.vscode/
 GEMINI.md
