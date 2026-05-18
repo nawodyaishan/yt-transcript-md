@@ -16,10 +16,10 @@ func TestRender(t *testing.T) {
 	now := time.Date(2026, 5, 17, 10, 0, 0, 0, time.UTC)
 
 	tests := []struct {
-		name      string
-		docs      []models.TranscriptDocument
-		failures  []models.FailedVideo
-		opts      Options
+		name       string
+		docs       []models.TranscriptDocument
+		failures   []models.FailedVideo
+		opts       Options
 		goldenFile string
 	}{
 		{
@@ -29,6 +29,16 @@ func TestRender(t *testing.T) {
 					Video: models.VideoInput{
 						Original: "https://youtu.be/dQw4w9WgXcQ",
 						VideoID:  "dQw4w9WgXcQ",
+					},
+					Metadata: models.VideoMetadata{
+						Title:           "Example Video",
+						AuthorName:      "Example Channel",
+						AuthorURL:       "https://www.youtube.com/@example",
+						ProviderName:    "YouTube",
+						ProviderURL:     "https://www.youtube.com/",
+						ThumbnailURL:    "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg",
+						ThumbnailWidth:  480,
+						ThumbnailHeight: 360,
 					},
 					Language:     "English",
 					LanguageCode: "en",

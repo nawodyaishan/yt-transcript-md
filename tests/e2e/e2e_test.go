@@ -75,10 +75,85 @@ func TestE2E_Export(t *testing.T) {
 		}
 	})
 
+	t.Run("default export via clipboard", func(t *testing.T) {
+		clipboardOut := filepath.Join(tempDir, "clipboard.md")
+		cmd := exec.Command(binPath)
+		cmd.Dir = tempDir
+		cmd.Env = append(os.Environ(),
+			"YT_TRANSCRIPT_MD_TEST_CLIPBOARD=https://youtu.be/dQw4w9WgXcQ",
+			"YT_TRANSCRIPT_MD_TEST_CLIPBOARD_OUT="+clipboardOut,
+		)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("command failed: %v\n%s", err, output)
+		}
+
+		content, err := os.ReadFile(clipboardOut)
+		if err != nil {
+			t.Fatalf("clipboard output was not written: %v", err)
+		}
+
+		savedPath := filepath.Join(tempDir, "transcripts.md")
+		saved, err := os.ReadFile(savedPath)
+		if err != nil {
+			t.Fatalf("default output file was not written: %v", err)
+		}
+		if string(saved) != string(content) {
+			t.Errorf("saved output and clipboard output differ")
+		}
+		if !contains(string(content), "Video `dQw4w9WgXcQ`") {
+			t.Errorf("clipboard output missing video ID")
+		}
+		if !contains(string(content), "Test transcript snippet") {
+			t.Errorf("clipboard output missing transcript")
+		}
+		if !contains(string(content), "Test Video") {
+			t.Errorf("clipboard output missing metadata")
+		}
+	})
+
 	t.Run("strict mode failure", func(t *testing.T) {
 		cmd := exec.Command(binPath, "export", "--links", "fail1234567", "--strict")
 		if err := cmd.Run(); err == nil {
 			t.Fatal("command should have failed in strict mode")
+		}
+	})
+}
+
+func TestE2E_Help(t *testing.T) {
+	t.Run("root help leads with clipboard workflow", func(t *testing.T) {
+		cmd := exec.Command(binPath, "--help")
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("help command failed: %v\n%s", err, output)
+		}
+
+		help := string(output)
+		clipboardIndex := strings.Index(help, "Default workflow: read clipboard")
+		flagsIndex := strings.Index(help, "--links")
+		if clipboardIndex == -1 {
+			t.Fatalf("root help missing clipboard workflow:\n%s", help)
+		}
+		if flagsIndex == -1 {
+			t.Fatalf("root help missing flags:\n%s", help)
+		}
+		if clipboardIndex > flagsIndex {
+			t.Fatalf("clipboard workflow should appear before advanced flags:\n%s", help)
+		}
+	})
+
+	t.Run("export help explains advanced file export", func(t *testing.T) {
+		cmd := exec.Command(binPath, "export", "--help")
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("export help command failed: %v\n%s", err, output)
+		}
+
+		help := string(output)
+		if !contains(help, "Advanced file and batch transcript export") {
+			t.Fatalf("export help missing advanced export summary:\n%s", help)
+		}
+		if !contains(help, "For the simplest workflow, copy a YouTube link and run yt-transcript-md") {
+			t.Fatalf("export help missing default workflow pointer:\n%s", help)
 		}
 	})
 }

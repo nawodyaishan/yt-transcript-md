@@ -41,6 +41,31 @@ func Render(documents []models.TranscriptDocument, failures []models.FailedVideo
 func renderDocument(index int, doc models.TranscriptDocument, includeTimestamps bool) string {
 	var sb strings.Builder
 	_, _ = fmt.Fprintf(&sb, "## %d. Video `%s`\n\n", index, doc.Video.VideoID)
+	sb.WriteString("### Video Details\n\n")
+	if doc.Metadata.Title != "" {
+		_, _ = fmt.Fprintf(&sb, "- Title: %s\n", doc.Metadata.Title)
+	}
+	if doc.Metadata.AuthorName != "" {
+		if doc.Metadata.AuthorURL != "" {
+			_, _ = fmt.Fprintf(&sb, "- Channel: [%s](%s)\n", doc.Metadata.AuthorName, doc.Metadata.AuthorURL)
+		} else {
+			_, _ = fmt.Fprintf(&sb, "- Channel: %s\n", doc.Metadata.AuthorName)
+		}
+	}
+	if doc.Metadata.ProviderName != "" {
+		if doc.Metadata.ProviderURL != "" {
+			_, _ = fmt.Fprintf(&sb, "- Provider: [%s](%s)\n", doc.Metadata.ProviderName, doc.Metadata.ProviderURL)
+		} else {
+			_, _ = fmt.Fprintf(&sb, "- Provider: %s\n", doc.Metadata.ProviderName)
+		}
+	}
+	if doc.Metadata.ThumbnailURL != "" {
+		_, _ = fmt.Fprintf(&sb, "- Thumbnail: %s", doc.Metadata.ThumbnailURL)
+		if doc.Metadata.ThumbnailWidth > 0 && doc.Metadata.ThumbnailHeight > 0 {
+			_, _ = fmt.Fprintf(&sb, " (`%dx%d`)", doc.Metadata.ThumbnailWidth, doc.Metadata.ThumbnailHeight)
+		}
+		sb.WriteString("\n")
+	}
 	_, _ = fmt.Fprintf(&sb, "- Source: %s\n", doc.Video.Original)
 	_, _ = fmt.Fprintf(&sb, "- Language: %s (`%s`)\n", doc.Language, doc.LanguageCode)
 	_, _ = fmt.Fprintf(&sb, "- Auto-generated: `%t`\n", doc.IsGenerated)

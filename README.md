@@ -3,34 +3,103 @@
 [![Go Version](https://img.shields.io/github/go-mod/go-version/nawodyaishan/yt-transcript-md)](https://go.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A fast, lightweight CLI tool written in Go to extract available YouTube transcripts and captions and export them into cleanly formatted Markdown files. Perfect for archiving video content, creating notes, or feeding data into LLMs.
+Copy a YouTube link. Run one command. Get a clean Markdown transcript saved to disk and copied back to your clipboard.
 
-## Features
+`yt-transcript-md` is a clipboard-first CLI for turning YouTube captions into Markdown notes for research, archiving, and LLM workflows. It fetches existing YouTube transcripts; it does not download audio or run speech-to-text.
 
-- **Blazing Fast:** Written in Go for optimal performance and minimal footprint.
-- **Multiple Inputs:** Provide comma-separated links, raw video IDs, or a text file containing URLs.
-- **Smart URL Parsing:** Handles standard `youtube.com/watch`, `youtu.be`, `/shorts`, `/live`, and `/embed` links effortlessly.
-- **Language Fallbacks:** Specify a priority list of language codes (e.g., `en,es,fr`) to fetch the best available transcript.
-- **Timestamp Support:** Optionally include precise start times for every snippet of text.
-- **Resilient:** Built-in retry mechanisms and partial success handling for batch processing large lists of videos.
+## Quick Start
+
+Copy a YouTube link or video ID, then run:
+
+```bash
+yt-transcript-md
+```
+
+The default command:
+
+- reads the YouTube link from your clipboard
+- fetches available public video details and transcript text
+- saves Markdown to `transcripts.md` and prints the full saved file path
+- copies the same Markdown back to your clipboard
+
+Example status output:
+
+```text
+[START] Processing 1 unique video(s)
+[INFO] Fetching video details for rJrd2QMVbGM
+[DETAILS] rJrd2QMVbGM: Title: Example Video | Channel: Example Channel
+[INFO] Fetching transcript for rJrd2QMVbGM
+[OK] Transcript fetched for rJrd2QMVbGM
+[SUMMARY] 1 succeeded, 0 failed, 0 warning(s)
+[SAVED] Markdown written to /Users/you/project/transcripts.md
+[COPIED] Markdown copied to clipboard
+```
+
+## Why Use It
+
+- **Fast capture:** copy a link, run one command, paste or open the Markdown.
+- **Markdown-ready output:** transcripts are formatted for notes, archives, and LLM context.
+- **Useful video details:** title, channel, thumbnail, provider, language, and snippet counts are included when available.
+- **Clear progress feedback:** colored terminal status shows metadata, title/channel, transcript fetch status, saved path, clipboard copy, and final summary.
+- **Clipboard and file output:** default mode does both; advanced modes support chosen files and batches.
+- **Rate-limit conscious:** one sequential metadata request and one transcript fetch sequence per unique video, with bounded retries.
+- **No audio processing:** uses available captions/transcripts directly.
+
+## Markdown Output
+
+Generated Markdown includes:
+
+- generation timestamp and success/failure counts
+- one section per unique video
+- a `Video Details` block with title, channel, provider, thumbnail, source URL, language, generated-caption flag, and snippet count when available
+- transcript text, optionally with timestamps
+- failed video details for partial batch failures
+
+## Advanced Workflows
+
+Write a specific link to a chosen file:
+
+```bash
+yt-transcript-md --links "https://youtu.be/dQw4w9WgXcQ" --out notes.md
+```
+
+Batch export multiple videos:
+
+```bash
+yt-transcript-md export \
+  --links "dQw4w9WgXcQ,https://www.youtube.com/watch?v=jNQXAC9IVRw" \
+  --out output/transcripts.md
+```
+
+Export from a text file:
+
+```bash
+yt-transcript-md export --input-file links.txt --out transcripts.md
+```
+
+Include timestamps and prefer Spanish, falling back to English:
+
+```bash
+yt-transcript-md export \
+  --links "https://youtu.be/dQw4w9WgXcQ" \
+  --languages "es,en" \
+  --timestamps \
+  --out transcripts.md
+```
 
 ## Installation
 
-### Via Homebrew (macOS/Linux)
-
-The easiest way to install on macOS and Linux is using Homebrew:
+### Homebrew
 
 ```bash
 brew install nawodyaishan/tap/yt-transcript-md
 ```
 
-### From Binary
+### Binary Releases
 
-Pre-compiled binaries for macOS, Linux, and Windows are available on the [Releases page](https://github.com/nawodyaishan/yt-transcript-md/releases).
+Pre-built binaries for macOS, Linux, and Windows are available on the [Releases page](https://github.com/nawodyaishan/yt-transcript-md/releases).
 
 ### From Source
-
-Ensure you have [Go 1.21+](https://go.dev/dl/) installed, then run:
 
 ```bash
 git clone https://github.com/nawodyaishan/yt-transcript-md.git
@@ -40,63 +109,49 @@ make build
 
 The compiled binary will be placed at `bin/yt-transcript-md`.
 
-## Usage
-
-Extract a single transcript:
-
-```bash
-yt-transcript-md export --links "https://youtu.be/dQw4w9WgXcQ" --out transcripts.md
-```
-
-### Advanced Examples
-
-**Batch extraction from multiple links:**
-```bash
-yt-transcript-md export \
-  --links "dQw4w9WgXcQ,https://www.youtube.com/watch?v=jNQXAC9IVRw" \
-  --out output/transcripts.md
-```
-
-**Extract from a text file:**
-*(Assuming `links.txt` contains one URL or ID per line)*
-```bash
-yt-transcript-md export --input-file links.txt --out transcripts.md
-```
-
-**Include timestamps and prefer Spanish, falling back to English:**
-```bash
-yt-transcript-md export \
-  --links "https://youtu.be/dQw4w9WgXcQ" \
-  --languages "es,en" \
-  --timestamps \
-  --out transcripts.md
-```
-
 ## Command Line Flags
+
+With no flags, `yt-transcript-md` runs the clipboard workflow. Use root-level input flags or the `export` command for explicit file and batch workflows.
 
 | Flag | Short | Default | Description |
 | :--- | :---: | :--- | :--- |
-| `--links` | `-l` | | Comma-separated list of YouTube links or video IDs. |
-| `--input-file` | `-f` | | Path to a text file containing YouTube links/IDs. |
-| `--out` | `-o` | `transcripts.md` | The path where the Markdown file will be saved. |
-| `--languages` | | `en` | Comma-separated list of ISO language codes to try. |
+| `--links` | `-l` | | Comma-separated YouTube links or video IDs. |
+| `--input-file` | `-f` | | Text file containing YouTube links or IDs. |
+| `--out` | `-o` | `transcripts.md` | Markdown output path. |
+| `--languages` | | `en` | Comma-separated language priority list. |
 | `--timestamps` | | `false` | Include `[MM:SS]` timestamps before each snippet. |
-| `--preserve-formatting` | | `false` | Preserve original HTML tags from YouTube. |
-| `--retries` | | `1` | Number of times to retry a failed fetch. |
-| `--retry-delay-seconds` | | `1.5` | Base delay between retries. |
-| `--strict` | | `false` | Fail the entire process if any single video fails to fetch. |
+| `--preserve-formatting` | | `false` | Preserve YouTube transcript HTML formatting. |
+| `--retries` | | `1` | Number of retries per failed transcript fetch. |
+| `--retry-delay-seconds` | | `1.5` | Base retry delay in seconds. |
+| `--strict` | | `false` | Exit non-zero if any video fails. |
+
+## Clipboard Support
+
+Clipboard mode uses native clipboard tools:
+
+- macOS: `pbpaste` and `pbcopy`
+- Windows: PowerShell clipboard support and `clip.exe`
+- Linux: one of `wl-clipboard`, `xclip`, `xsel`, or Termux clipboard commands
 
 ## Limitations
 
-- **No Audio Processing:** This tool fetches existing closed captions/transcripts directly from YouTube. It does not download audio or perform AI Speech-to-Text transcription. If a video has no captions available, the tool will report a failure for that video.
-- **Availability:** Relies on YouTube's internal caption API endpoints, which may be subject to rate limiting if abused heavily.
+- The tool only fetches existing YouTube captions/transcripts.
+- Videos without available captions will be reported as failures.
+- Public metadata is best-effort and may be omitted when unavailable.
+- YouTube endpoints may rate limit abusive usage; this tool keeps requests sequential and deduplicates repeated inputs per run.
 
 ## Development
 
-Run all quality checks (formatting, linting, tests, build):
+Run all quality checks:
 
 ```bash
 make verify
+```
+
+Run the Go test suite directly:
+
+```bash
+go test ./...
 ```
 
 ## License

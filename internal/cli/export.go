@@ -24,7 +24,17 @@ var opts exportOptions
 
 var exportCmd = &cobra.Command{
 	Use:   "export",
-	Short: "Fetch transcripts and write a Markdown file",
+	Short: "Advanced file and batch transcript export",
+	Long: `Advanced file and batch transcript export.
+
+Fetch transcripts from explicit links, video IDs, or an input file and
+write the generated Markdown to a chosen output path.
+
+For the simplest workflow, copy a YouTube link and run yt-transcript-md with no
+arguments. This export command is for explicit file destinations, batch input,
+and automation.`,
+	Example: `  yt-transcript-md export --links "https://youtu.be/dQw4w9WgXcQ" --out notes.md
+  yt-transcript-md export --input-file links.txt --out transcripts.md`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runExport()
 	},
@@ -35,14 +45,16 @@ func init() {
 	addExportFlags(exportCmd)
 	addExportFlags(rootCmd)
 
-	// Set the root command to run export by default if no subcommand is provided
-	// and flags are set.
+	// Keep flag-based root export for compatibility, and use the clipboard
+	// workflow only for a true no-flag invocation.
 	originalRunE := rootCmd.RunE
 	rootCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		// If a subcommand was specified, Execute will handle it.
-		// If no subcommand, check if we should run export.
 		if cmd.Flags().Changed("links") || cmd.Flags().Changed("input-file") {
 			return runExport()
+		}
+		if cmd.Flags().NFlag() == 0 && len(args) == 0 {
+			return runClipboardExport()
 		}
 		if originalRunE != nil {
 			return originalRunE(cmd, args)
@@ -66,8 +78,22 @@ func addExportFlags(cmd *cobra.Command) {
 func runExport() error {
 	ctx := context.Background()
 	provider := getProvider()
+	metadataProvider := getMetadataProvider()
 
-	exportOpts := app.ExportOptions{
+	return app.Export(ctx, exportOptionsFromFlags(), provider, metadataProvider, os.Stdout)
+}
+
+func runClipboardExport() error {
+	ctx := context.Background()
+	provider := getProvider()
+	metadataProvider := getMetadataProvider()
+	clipboard := getClipboard()
+
+	return app.ExportClipboard(ctx, exportOptionsFromFlags(), clipboard, provider, metadataProvider, os.Stdout)
+}
+
+func exportOptionsFromFlags() app.ExportOptions {
+	return app.ExportOptions{
 		Links:              opts.links,
 		InputFile:          opts.inputFile,
 		Out:                opts.out,
@@ -78,6 +104,4 @@ func runExport() error {
 		RetryDelaySeconds:  opts.retryDelaySeconds,
 		Strict:             opts.strict,
 	}
-
-	return app.Export(ctx, exportOpts, provider, os.Stdout)
 }

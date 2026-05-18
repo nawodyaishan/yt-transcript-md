@@ -10,6 +10,7 @@ import (
 
 	"github.com/nawodyaishan/yt-transcript-md/internal/input"
 	"github.com/nawodyaishan/yt-transcript-md/internal/markdown"
+	"github.com/nawodyaishan/yt-transcript-md/internal/metadata"
 	"github.com/nawodyaishan/yt-transcript-md/internal/models"
 	"github.com/nawodyaishan/yt-transcript-md/internal/transcript"
 )
@@ -27,20 +28,79 @@ type ExportOptions struct {
 	Strict             bool
 }
 
+// Clipboard represents the clipboard operations needed by the default command.
+type Clipboard interface {
+	ReadAll() (string, error)
+	WriteAll(string) error
+}
+
+type exportResult struct {
+	Markdown string
+}
+
 // Export orchestrates the fetching and rendering of transcripts.
-func Export(ctx context.Context, opts ExportOptions, provider transcript.Provider, log io.Writer) error {
+func Export(ctx context.Context, opts ExportOptions, provider transcript.Provider, metadataProvider metadata.Provider, log io.Writer) error {
 	rawInput, err := readRawInput(opts)
 	if err != nil {
 		return err
 	}
 
+	reporter := NewReporter(log)
+	result, err := renderExport(ctx, rawInput, opts, provider, metadataProvider, reporter)
+	if result.Markdown != "" {
+		outPath := outputPath(opts.Out)
+		if writeErr := writeOutputFile(outPath, result.Markdown); writeErr != nil {
+			return fmt.Errorf("failed to write output: %w", writeErr)
+		}
+
+		reporter.Saved(displayPath(outPath))
+	}
+
+	return err
+}
+
+// ExportClipboard reads input from the clipboard, saves Markdown, and copies it back.
+func ExportClipboard(ctx context.Context, opts ExportOptions, clipboard Clipboard, provider transcript.Provider, metadataProvider metadata.Provider, log io.Writer) error {
+	if clipboard == nil {
+		return fmt.Errorf("clipboard is not configured")
+	}
+
+	rawInput, err := clipboard.ReadAll()
+	if err != nil {
+		return fmt.Errorf("failed to read clipboard: %w", err)
+	}
+
+	if strings.TrimSpace(rawInput) == "" {
+		return fmt.Errorf("clipboard is empty")
+	}
+
+	reporter := NewReporter(log)
+	result, err := renderExport(ctx, rawInput, opts, provider, metadataProvider, reporter)
+	if result.Markdown != "" {
+		outPath := outputPath(opts.Out)
+		if writeErr := writeOutputFile(outPath, result.Markdown); writeErr != nil {
+			return fmt.Errorf("failed to write output: %w", writeErr)
+		}
+		reporter.Saved(displayPath(outPath))
+
+		if writeErr := clipboard.WriteAll(result.Markdown); writeErr != nil {
+			return fmt.Errorf("failed to write clipboard: %w", writeErr)
+		}
+
+		reporter.Copied()
+	}
+
+	return err
+}
+
+func renderExport(ctx context.Context, rawInput string, opts ExportOptions, provider transcript.Provider, metadataProvider metadata.Provider, reporter *Reporter) (exportResult, error) {
 	videos, err := input.ParseVideoInputs(rawInput)
 	if err != nil {
-		return fmt.Errorf("input error: %w", err)
+		return exportResult{}, fmt.Errorf("input error: %w", err)
 	}
 
 	if len(videos) == 0 {
-		return fmt.Errorf("no valid YouTube links or video IDs provided")
+		return exportResult{}, fmt.Errorf("no valid YouTube links or video IDs provided")
 	}
 
 	languagePriority := parseLanguages(opts.Languages)
@@ -50,45 +110,70 @@ func Export(ctx context.Context, opts ExportOptions, provider transcript.Provide
 		Retries:            opts.Retries,
 		RetryDelaySeconds:  opts.RetryDelaySeconds,
 	}
+	metadataOpts := metadata.FetchOptions{
+		Retries:           opts.Retries,
+		RetryDelaySeconds: opts.RetryDelaySeconds,
+	}
 
 	var documents []models.TranscriptDocument
 	var failures []models.FailedVideo
+	metadataWarnings := 0
 
-	_, _ = fmt.Fprintf(log, "Fetching transcripts for %d video(s)...\n", len(videos))
+	reporter.Start(len(videos))
 
 	for _, video := range videos {
+		var videoMetadata models.VideoMetadata
+		if metadataProvider != nil {
+			reporter.MetadataStart(video.VideoID)
+			fetchedMetadata, err := metadataProvider.Fetch(ctx, video, metadataOpts)
+			if err != nil {
+				metadataWarnings++
+				reporter.MetadataWarning(video.VideoID, err)
+			} else {
+				videoMetadata = fetchedMetadata
+				reporter.MetadataSuccess(video.VideoID, fetchedMetadata)
+			}
+		}
+
+		reporter.TranscriptStart(video.VideoID)
 		doc, err := provider.Fetch(ctx, video, fetchOpts)
 		if err != nil {
 			failures = append(failures, models.FailedVideo{
 				Original: video.Original,
 				Reason:   err.Error(),
 			})
-			_, _ = fmt.Fprintf(log, "✗ %s: %v\n", video.VideoID, err)
+			reporter.TranscriptFailure(video.VideoID, err)
 			if opts.Strict {
 				break
 			}
 			continue
 		}
 
+		doc.Metadata = videoMetadata
 		documents = append(documents, doc)
-		_, _ = fmt.Fprintf(log, "✓ %s\n", video.VideoID)
+		reporter.TranscriptSuccess(video.VideoID)
 	}
+
+	reporter.Summary(len(documents), len(failures), metadataWarnings)
 
 	md := markdown.Render(documents, failures, markdown.Options{
 		IncludeTimestamps: opts.Timestamps,
 	})
 
-	if err := writeOutputFile(opts.Out, md); err != nil {
-		return fmt.Errorf("failed to write output: %w", err)
-	}
-
-	_, _ = fmt.Fprintf(log, "\nWrote Markdown: %s\n", opts.Out)
+	result := exportResult{Markdown: md}
 
 	if opts.Strict && len(failures) > 0 {
-		return fmt.Errorf("strict mode: %d videos failed", len(failures))
+		return result, fmt.Errorf("strict mode: %d videos failed", len(failures))
 	}
 
-	return nil
+	return result, nil
+}
+
+func outputPath(path string) string {
+	if strings.TrimSpace(path) == "" {
+		return "transcripts.md"
+	}
+	return path
 }
 
 func readRawInput(opts ExportOptions) (string, error) {
@@ -134,4 +219,12 @@ func writeOutputFile(path string, content string) error {
 		return err
 	}
 	return os.WriteFile(path, []byte(content), 0644)
+}
+
+func displayPath(path string) string {
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		return path
+	}
+	return absolute
 }
