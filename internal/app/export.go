@@ -98,6 +98,34 @@ func ExportClipboard(ctx context.Context, opts ExportOptions, clipboard Clipboar
 	return err
 }
 
+// ExportClipboardVideos saves selected videos and copies the rendered Markdown back to the clipboard.
+func ExportClipboardVideos(ctx context.Context, opts ExportOptions, clipboard Clipboard, videos []models.VideoInput, provider transcript.Provider, metadataProvider metadata.Provider, log io.Writer) error {
+	if clipboard == nil {
+		return fmt.Errorf("clipboard is not configured")
+	}
+	if len(videos) == 0 {
+		return fmt.Errorf("no videos selected")
+	}
+
+	reporter := NewReporter(log)
+	result, err := renderVideos(ctx, videos, opts, provider, metadataProvider, reporter)
+	if result.Markdown != "" {
+		outPath := outputPath(opts.Out)
+		if writeErr := writeOutputFile(outPath, result.Markdown); writeErr != nil {
+			return fmt.Errorf("failed to write output: %w", writeErr)
+		}
+		reporter.Saved(displayPath(outPath))
+
+		if writeErr := clipboard.WriteAll(result.Markdown); writeErr != nil {
+			return fmt.Errorf("failed to write clipboard: %w", writeErr)
+		}
+
+		reporter.Copied()
+	}
+
+	return err
+}
+
 func renderExport(ctx context.Context, rawInput string, opts ExportOptions, provider transcript.Provider, metadataProvider metadata.Provider, reporter *Reporter) (exportResult, error) {
 	videos, err := input.ParseVideoInputs(rawInput)
 	if err != nil {

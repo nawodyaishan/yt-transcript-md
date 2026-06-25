@@ -6,8 +6,11 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strconv"
+	"strings"
 
 	"github.com/nawodyaishan/yt-transcript-md/internal/app"
+	"github.com/nawodyaishan/yt-transcript-md/internal/history"
 	"github.com/nawodyaishan/yt-transcript-md/internal/metadata"
 	"github.com/nawodyaishan/yt-transcript-md/internal/models"
 	"github.com/nawodyaishan/yt-transcript-md/internal/transcript"
@@ -37,8 +40,8 @@ func getProvider() transcript.Provider {
 type testClipboard struct{}
 
 func (testClipboard) ReadAll() (string, error) {
-	text := os.Getenv("YT_TRANSCRIPT_MD_TEST_CLIPBOARD")
-	if text == "" {
+	text, ok := os.LookupEnv("YT_TRANSCRIPT_MD_TEST_CLIPBOARD")
+	if !ok {
 		return "", errors.New("YT_TRANSCRIPT_MD_TEST_CLIPBOARD is required")
 	}
 	return text, nil
@@ -74,4 +77,50 @@ func (testMetadataProvider) Fetch(ctx context.Context, video models.VideoInput, 
 
 func getMetadataProvider() metadata.Provider {
 	return testMetadataProvider{}
+}
+
+func getHistoryProviders() []history.Provider {
+	source := os.Getenv("YT_TRANSCRIPT_MD_TEST_HISTORY_SOURCE")
+	if source == "" {
+		source = history.SourceCopyQ
+	}
+	raw := os.Getenv("YT_TRANSCRIPT_MD_TEST_HISTORY")
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, "\n---\n")
+	entries := make([]history.Entry, 0, len(parts))
+	for i, part := range parts {
+		if strings.TrimSpace(part) == "" {
+			continue
+		}
+		entries = append(entries, history.Entry{
+			Provider: source,
+			ID:       strconv.Itoa(i),
+			Text:     part,
+			Preview:  part,
+			Rank:     i,
+		})
+	}
+	return []history.Provider{testHistoryProvider{name: source, entries: entries}}
+}
+
+type testHistoryProvider struct {
+	name    string
+	entries []history.Entry
+}
+
+func (p testHistoryProvider) Name() string {
+	return p.name
+}
+
+func (p testHistoryProvider) Available(ctx context.Context) error {
+	return nil
+}
+
+func (p testHistoryProvider) Entries(ctx context.Context, limit int) ([]history.Entry, error) {
+	if limit < len(p.entries) {
+		return p.entries[:limit], nil
+	}
+	return p.entries, nil
 }

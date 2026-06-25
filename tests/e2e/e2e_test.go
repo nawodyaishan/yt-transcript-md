@@ -192,6 +192,87 @@ func TestE2E_Export(t *testing.T) {
 		}
 	})
 
+	t.Run("clipboard history selection all", func(t *testing.T) {
+		dir := filepath.Join(tempDir, "history-all")
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		clipboardOut := filepath.Join(dir, "clipboard.md")
+		cmd := exec.Command(binPath, "--history-source", "copyq", "--history-limit", "10", "--clipboard-selection", "all")
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(),
+			"YT_TRANSCRIPT_MD_TEST_CLIPBOARD=",
+			"YT_TRANSCRIPT_MD_TEST_CLIPBOARD_OUT="+clipboardOut,
+			"YT_TRANSCRIPT_MD_TEST_HISTORY_SOURCE=copyq",
+			"YT_TRANSCRIPT_MD_TEST_HISTORY=https://youtu.be/dQw4w9WgXcQ\n---\nhttps://youtu.be/jNQXAC9IVRw",
+		)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("command failed: %v\n%s", err, output)
+		}
+		content, err := os.ReadFile(filepath.Join(dir, "transcripts.md"))
+		if err != nil {
+			t.Fatalf("default output file was not written: %v", err)
+		}
+		if !contains(string(content), "Video `dQw4w9WgXcQ`") || !contains(string(content), "Video `jNQXAC9IVRw`") {
+			t.Fatalf("output missing history videos:\n%s", content)
+		}
+	})
+
+	t.Run("clipboard history limit", func(t *testing.T) {
+		dir := filepath.Join(tempDir, "history-limit")
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		clipboardOut := filepath.Join(dir, "clipboard.md")
+		cmd := exec.Command(binPath, "--history-source", "copyq", "--history-limit", "1", "--clipboard-selection", "all")
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(),
+			"YT_TRANSCRIPT_MD_TEST_CLIPBOARD=",
+			"YT_TRANSCRIPT_MD_TEST_CLIPBOARD_OUT="+clipboardOut,
+			"YT_TRANSCRIPT_MD_TEST_HISTORY_SOURCE=copyq",
+			"YT_TRANSCRIPT_MD_TEST_HISTORY=https://youtu.be/dQw4w9WgXcQ\n---\nhttps://youtu.be/jNQXAC9IVRw",
+		)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("command failed: %v\n%s", err, output)
+		}
+		content, err := os.ReadFile(filepath.Join(dir, "transcripts.md"))
+		if err != nil {
+			t.Fatalf("default output file was not written: %v", err)
+		}
+		if !contains(string(content), "Video `dQw4w9WgXcQ`") {
+			t.Fatalf("output missing first history video:\n%s", content)
+		}
+		if contains(string(content), "Video `jNQXAC9IVRw`") {
+			t.Fatalf("output contains history entry beyond limit:\n%s", content)
+		}
+	})
+
+	t.Run("no history uses current clipboard only", func(t *testing.T) {
+		dir := filepath.Join(tempDir, "no-history")
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		clipboardOut := filepath.Join(dir, "clipboard.md")
+		cmd := exec.Command(binPath, "--no-history")
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(),
+			"YT_TRANSCRIPT_MD_TEST_CLIPBOARD=https://youtu.be/dQw4w9WgXcQ",
+			"YT_TRANSCRIPT_MD_TEST_CLIPBOARD_OUT="+clipboardOut,
+			"YT_TRANSCRIPT_MD_TEST_HISTORY_SOURCE=copyq",
+			"YT_TRANSCRIPT_MD_TEST_HISTORY=https://youtu.be/jNQXAC9IVRw",
+		)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("command failed: %v\n%s", err, output)
+		}
+		content, err := os.ReadFile(filepath.Join(dir, "transcripts.md"))
+		if err != nil {
+			t.Fatalf("default output file was not written: %v", err)
+		}
+		if !contains(string(content), "Video `dQw4w9WgXcQ`") || contains(string(content), "Video `jNQXAC9IVRw`") {
+			t.Fatalf("output should contain only current clipboard video:\n%s", content)
+		}
+	})
+
 	t.Run("clipboard multi-link non-interactive requires selection", func(t *testing.T) {
 		dir := filepath.Join(tempDir, "clipboard-no-selection")
 		if err := os.MkdirAll(dir, 0755); err != nil {
@@ -228,6 +309,21 @@ func TestE2E_Export(t *testing.T) {
 		}
 		if _, statErr := os.Stat(outPath); !os.IsNotExist(statErr) {
 			t.Fatalf("output file should not be created after rejected selection flag")
+		}
+	})
+
+	t.Run("history flag rejected with explicit root links", func(t *testing.T) {
+		outPath := filepath.Join(tempDir, "history-rejected.md")
+		cmd := exec.Command(binPath, "--links", "dQw4w9WgXcQ", "--history-source", "copyq", "--out", outPath)
+		output, err := cmd.CombinedOutput()
+		if err == nil {
+			t.Fatalf("command should have failed with explicit links and history flag:\n%s", output)
+		}
+		if !contains(string(output), "--history-source, --history-limit, and --no-history can only be used with the default clipboard workflow") {
+			t.Fatalf("error should explain history flag scope:\n%s", output)
+		}
+		if _, statErr := os.Stat(outPath); !os.IsNotExist(statErr) {
+			t.Fatalf("output file should not be created after rejected history flag")
 		}
 	})
 
@@ -322,11 +418,14 @@ func TestE2E_Help(t *testing.T) {
 		if clipboardIndex > flagsIndex {
 			t.Fatalf("clipboard workflow should appear before advanced flags:\n%s", help)
 		}
-		if !contains(help, "multiple YouTube videos") {
-			t.Fatalf("root help missing multi-link clipboard prompt language:\n%s", help)
+		if !contains(help, "clipboard-history managers") {
+			t.Fatalf("root help missing clipboard history language:\n%s", help)
 		}
 		if !contains(help, "--clipboard-selection") {
 			t.Fatalf("root help missing clipboard selection flag:\n%s", help)
+		}
+		if !contains(help, "--history-source") || !contains(help, "--history-limit") || !contains(help, "--no-history") {
+			t.Fatalf("root help missing clipboard history flags:\n%s", help)
 		}
 	})
 

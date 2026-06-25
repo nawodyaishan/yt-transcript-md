@@ -18,12 +18,13 @@ yt-transcript-md
 The default command:
 
 - reads YouTube links from your clipboard
+- scans supported clipboard-history managers in interactive terminals
 - asks what to process when multiple unique videos are detected
 - fetches available public video details and transcript text
 - saves Markdown to `transcripts.md` and prints the full saved file path
 - copies the same Markdown back to your clipboard
 
-If the clipboard contains multiple unique videos, interactive runs ask whether to process one video, all videos, or the first N videos from clipboard order. Non-interactive runs can choose explicitly:
+If the current clipboard or clipboard history contains multiple unique videos, interactive runs open a searchable TUI picker. Non-interactive runs can choose explicitly:
 
 ```bash
 yt-transcript-md --clipboard-selection all
@@ -68,13 +69,19 @@ Generated Markdown includes:
 
 ## Clipboard Multi-Link Selection
 
-Clipboard mode accepts a copied YouTube URL, raw video ID, or surrounding text that contains YouTube links. It extracts valid YouTube videos, deduplicates them, and keeps their first-seen clipboard order.
+Clipboard mode accepts a copied YouTube URL, raw video ID, or surrounding text that contains YouTube links. It extracts valid YouTube videos, deduplicates them, and keeps their first-seen order.
 
-When one unique video is found, `yt-transcript-md` processes it immediately. When multiple unique videos are found in an interactive terminal, it prompts before making any metadata or transcript requests:
+When one unique video is found, `yt-transcript-md` processes it immediately. When multiple unique videos are found in an interactive terminal, it opens a TUI before making any metadata or transcript requests.
 
 ```text
-Detected 3 unique YouTube videos in clipboard.
-Process [o]ne, [a]ll, [r]ecent N from clipboard order, or [c]ancel?
+Select YouTube videos from clipboard history
+
+Search:
+
+> [ ] dQw4w9WgXcQ  current  https://youtu.be/dQw4w9WgXcQ
+  [x] jNQXAC9IVRw  copyq    https://youtu.be/jNQXAC9IVRw
+
+space select  / search  a all visible  n first N  enter process  q cancel
 ```
 
 For scripts, CI, or redirected terminals, pass an explicit selection:
@@ -91,6 +98,35 @@ yt-transcript-md --clipboard-selection recent:3
 ```
 
 `--clipboard-selection` only applies to the default clipboard workflow. Use `--links`, `--input-file`, or `export` for explicit non-clipboard batch input.
+
+## Clipboard History Sources
+
+In interactive terminals, `yt-transcript-md` can scan supported clipboard-history managers for recently copied YouTube links. It always reads the current clipboard first, then scans provider history when enabled.
+
+Supported first-slice providers:
+
+- **CopyQ** on macOS and Linux: install and keep CopyQ running.
+- **cliphist** on Linux Wayland: configure history capture, for example `wl-paste --watch cliphist store`.
+- **GPaste** on Linux GNOME: keep the GPaste daemon running.
+
+Control history scanning:
+
+```bash
+# Auto-detect supported providers
+yt-transcript-md --history-source auto
+
+# Use only current clipboard, no provider history
+yt-transcript-md --no-history
+
+# Scan CopyQ history only
+yt-transcript-md --history-source copyq --history-limit 25
+
+# Scan cliphist or GPaste explicitly
+yt-transcript-md --history-source cliphist
+yt-transcript-md --history-source gpaste
+```
+
+History scanning is local-only. The tool extracts YouTube links locally, shows only sanitized previews, and does not log raw clipboard-history entries.
 
 ## Advanced Workflows
 
@@ -156,6 +192,9 @@ With no flags, `yt-transcript-md` runs the clipboard workflow. Use root-level in
 | `--input-file` | `-f` | | Text file containing YouTube links or IDs. |
 | `--out` | `-o` | `transcripts.md` | Markdown output path. |
 | `--clipboard-selection` | | | Resolve multi-link clipboard input without prompting: `all`, `one:<index>`, or `recent:<count>`. |
+| `--history-source` | | `auto` | Clipboard history source: `auto`, `current`, `copyq`, `cliphist`, or `gpaste`. |
+| `--history-limit` | | `50` | Maximum clipboard history entries to scan per provider. |
+| `--no-history` | | `false` | Disable clipboard history scanning and use only the current clipboard. |
 | `--languages` | | `en` | Comma-separated language priority list. |
 | `--timestamps` | | `false` | Include `[MM:SS]` timestamps before each snippet. |
 | `--preserve-formatting` | | `false` | Preserve YouTube transcript HTML formatting. |

@@ -5,6 +5,7 @@ package cli
 import (
 	"github.com/nawodyaishan/yt-transcript-md/internal/app"
 	"github.com/nawodyaishan/yt-transcript-md/internal/clipboard"
+	"github.com/nawodyaishan/yt-transcript-md/internal/history"
 	"github.com/nawodyaishan/yt-transcript-md/internal/metadata"
 	"github.com/nawodyaishan/yt-transcript-md/internal/transcript"
 )
@@ -19,4 +20,8 @@ func getClipboard() app.Clipboard {
 
 func getMetadataProvider() metadata.Provider {
 	return metadata.NewOEmbedProvider()
+}
+
+func getHistoryProviders() []history.Provider {
+	return history.DefaultProviders(history.ExecRunner{})
 }

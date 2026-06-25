@@ -14,17 +14,21 @@ var rootCmd = &cobra.Command{
 
 Copy a YouTube link or video ID, run yt-transcript-md with no arguments, and
 the command saves transcripts.md while also copying the generated Markdown back
-to your clipboard. If your clipboard contains multiple YouTube videos, the
-default workflow asks whether to process one video, all videos, or the first N
-videos from clipboard order.
+to your clipboard. In an interactive terminal, the default workflow can also
+scan supported clipboard-history managers for recently copied YouTube links and
+show a searchable multi-select TUI before fetching transcripts.
 
-Use --clipboard-selection for non-interactive clipboard runs, or use flags and
-the export command for explicit file and batch workflows.`,
+Use --history-source and --history-limit to control clipboard-history scanning.
+Use --clipboard-selection for non-interactive clipboard runs, or use flags and the
+export command for explicit file and batch workflows.`,
 	Example: `  # Default workflow: read clipboard, save transcripts.md, copy Markdown back
   yt-transcript-md
 
   # Non-interactive clipboard batch selection
   yt-transcript-md --clipboard-selection recent:2
+
+  # Scan CopyQ history and choose from recent copied YouTube links
+  yt-transcript-md --history-source copyq --history-limit 25
 
   # Advanced workflow: write a specific link to a chosen file
   yt-transcript-md --links "https://youtu.be/dQw4w9WgXcQ" --out notes.md
