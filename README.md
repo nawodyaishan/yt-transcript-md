@@ -3,7 +3,7 @@
 [![Go Version](https://img.shields.io/github/go-mod/go-version/nawodyaishan/yt-transcript-md)](https://go.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Copy a YouTube link. Run one command. Get a clean Markdown transcript saved to disk and copied back to your clipboard.
+Copy one or more YouTube links. Run one command. Get clean Markdown transcripts saved to disk and copied back to your clipboard.
 
 `yt-transcript-md` is a clipboard-first CLI for turning YouTube captions into Markdown notes for research, archiving, and LLM workflows. It fetches existing YouTube transcripts; it does not download audio or run speech-to-text.
 
@@ -17,10 +17,21 @@ yt-transcript-md
 
 The default command:
 
-- reads the YouTube link from your clipboard
+- reads YouTube links from your clipboard
+- asks what to process when multiple unique videos are detected
 - fetches available public video details and transcript text
 - saves Markdown to `transcripts.md` and prints the full saved file path
 - copies the same Markdown back to your clipboard
+
+If the clipboard contains multiple unique videos, interactive runs ask whether to process one video, all videos, or the first N videos from clipboard order. Non-interactive runs can choose explicitly:
+
+```bash
+yt-transcript-md --clipboard-selection all
+yt-transcript-md --clipboard-selection one:2
+yt-transcript-md --clipboard-selection recent:3
+```
+
+The `recent` selector uses the order found in your clipboard, not the video's publish date.
 
 Example status output:
 
@@ -41,8 +52,8 @@ Example status output:
 - **Markdown-ready output:** transcripts are formatted for notes, archives, and LLM context.
 - **Useful video details:** title, channel, thumbnail, provider, language, and snippet counts are included when available.
 - **Clear progress feedback:** colored terminal status shows metadata, title/channel, transcript fetch status, saved path, clipboard copy, and final summary.
-- **Clipboard and file output:** default mode does both; advanced modes support chosen files and batches.
-- **Rate-limit conscious:** one sequential metadata request and one transcript fetch sequence per unique video, with bounded retries.
+- **Clipboard and file output:** default mode does both; advanced modes support chosen files and non-interactive batches.
+- **Rate-limit conscious:** one sequential metadata request and one transcript fetch sequence per selected unique video, with bounded retries.
 - **No audio processing:** uses available captions/transcripts directly.
 
 ## Markdown Output
@@ -54,6 +65,32 @@ Generated Markdown includes:
 - a `Video Details` block with title, channel, provider, thumbnail, source URL, language, generated-caption flag, and snippet count when available
 - transcript text, optionally with timestamps
 - failed video details for partial batch failures
+
+## Clipboard Multi-Link Selection
+
+Clipboard mode accepts a copied YouTube URL, raw video ID, or surrounding text that contains YouTube links. It extracts valid YouTube videos, deduplicates them, and keeps their first-seen clipboard order.
+
+When one unique video is found, `yt-transcript-md` processes it immediately. When multiple unique videos are found in an interactive terminal, it prompts before making any metadata or transcript requests:
+
+```text
+Detected 3 unique YouTube videos in clipboard.
+Process [o]ne, [a]ll, [r]ecent N from clipboard order, or [c]ancel?
+```
+
+For scripts, CI, or redirected terminals, pass an explicit selection:
+
+```bash
+# Process every unique video found in the clipboard
+yt-transcript-md --clipboard-selection all
+
+# Process only the second unique video found in the clipboard
+yt-transcript-md --clipboard-selection one:2
+
+# Process the first three unique videos found in clipboard order
+yt-transcript-md --clipboard-selection recent:3
+```
+
+`--clipboard-selection` only applies to the default clipboard workflow. Use `--links`, `--input-file`, or `export` for explicit non-clipboard batch input.
 
 ## Advanced Workflows
 
@@ -118,6 +155,7 @@ With no flags, `yt-transcript-md` runs the clipboard workflow. Use root-level in
 | `--links` | `-l` | | Comma-separated YouTube links or video IDs. |
 | `--input-file` | `-f` | | Text file containing YouTube links or IDs. |
 | `--out` | `-o` | `transcripts.md` | Markdown output path. |
+| `--clipboard-selection` | | | Resolve multi-link clipboard input without prompting: `all`, `one:<index>`, or `recent:<count>`. |
 | `--languages` | | `en` | Comma-separated language priority list. |
 | `--timestamps` | | `false` | Include `[MM:SS]` timestamps before each snippet. |
 | `--preserve-formatting` | | `false` | Preserve YouTube transcript HTML formatting. |

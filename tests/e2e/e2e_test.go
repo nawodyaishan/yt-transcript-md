@@ -111,6 +111,189 @@ func TestE2E_Export(t *testing.T) {
 		}
 	})
 
+	t.Run("clipboard multi-link selection all", func(t *testing.T) {
+		dir := filepath.Join(tempDir, "clipboard-all")
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		clipboardOut := filepath.Join(dir, "clipboard.md")
+		cmd := exec.Command(binPath, "--clipboard-selection", "all")
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(),
+			"YT_TRANSCRIPT_MD_TEST_CLIPBOARD=https://youtu.be/dQw4w9WgXcQ\nhttps://youtu.be/jNQXAC9IVRw",
+			"YT_TRANSCRIPT_MD_TEST_CLIPBOARD_OUT="+clipboardOut,
+		)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("command failed: %v\n%s", err, output)
+		}
+
+		content, err := os.ReadFile(filepath.Join(dir, "transcripts.md"))
+		if err != nil {
+			t.Fatalf("default output file was not written: %v", err)
+		}
+		if !contains(string(content), "Video `dQw4w9WgXcQ`") || !contains(string(content), "Video `jNQXAC9IVRw`") {
+			t.Fatalf("output missing selected videos:\n%s", content)
+		}
+	})
+
+	t.Run("clipboard multi-link selection one", func(t *testing.T) {
+		dir := filepath.Join(tempDir, "clipboard-one")
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		clipboardOut := filepath.Join(dir, "clipboard.md")
+		cmd := exec.Command(binPath, "--clipboard-selection", "one:2")
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(),
+			"YT_TRANSCRIPT_MD_TEST_CLIPBOARD=https://youtu.be/dQw4w9WgXcQ\nhttps://youtu.be/jNQXAC9IVRw",
+			"YT_TRANSCRIPT_MD_TEST_CLIPBOARD_OUT="+clipboardOut,
+		)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("command failed: %v\n%s", err, output)
+		}
+
+		content, err := os.ReadFile(filepath.Join(dir, "transcripts.md"))
+		if err != nil {
+			t.Fatalf("default output file was not written: %v", err)
+		}
+		if contains(string(content), "Video `dQw4w9WgXcQ`") {
+			t.Fatalf("output contains unselected first video:\n%s", content)
+		}
+		if !contains(string(content), "Video `jNQXAC9IVRw`") {
+			t.Fatalf("output missing selected second video:\n%s", content)
+		}
+	})
+
+	t.Run("clipboard multi-link selection recent", func(t *testing.T) {
+		dir := filepath.Join(tempDir, "clipboard-recent")
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		clipboardOut := filepath.Join(dir, "clipboard.md")
+		cmd := exec.Command(binPath, "--clipboard-selection", "recent:2")
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(),
+			"YT_TRANSCRIPT_MD_TEST_CLIPBOARD=Videos: https://youtu.be/dQw4w9WgXcQ, https://youtu.be/jNQXAC9IVRw, https://youtu.be/BaW_jenozKc",
+			"YT_TRANSCRIPT_MD_TEST_CLIPBOARD_OUT="+clipboardOut,
+		)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("command failed: %v\n%s", err, output)
+		}
+
+		content, err := os.ReadFile(filepath.Join(dir, "transcripts.md"))
+		if err != nil {
+			t.Fatalf("default output file was not written: %v", err)
+		}
+		if !contains(string(content), "Video `dQw4w9WgXcQ`") || !contains(string(content), "Video `jNQXAC9IVRw`") {
+			t.Fatalf("output missing recent videos:\n%s", content)
+		}
+		if contains(string(content), "Video `BaW_jenozKc`") {
+			t.Fatalf("output contains unselected third video:\n%s", content)
+		}
+	})
+
+	t.Run("clipboard multi-link non-interactive requires selection", func(t *testing.T) {
+		dir := filepath.Join(tempDir, "clipboard-no-selection")
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		clipboardOut := filepath.Join(dir, "clipboard.md")
+		cmd := exec.Command(binPath)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(),
+			"YT_TRANSCRIPT_MD_TEST_CLIPBOARD=https://youtu.be/dQw4w9WgXcQ\nhttps://youtu.be/jNQXAC9IVRw",
+			"YT_TRANSCRIPT_MD_TEST_CLIPBOARD_OUT="+clipboardOut,
+		)
+		output, err := cmd.CombinedOutput()
+		if err == nil {
+			t.Fatalf("command should have failed without selection:\n%s", output)
+		}
+		if !contains(string(output), "clipboard selection is required") {
+			t.Fatalf("error should explain selection requirement:\n%s", output)
+		}
+		if _, statErr := os.Stat(filepath.Join(dir, "transcripts.md")); !os.IsNotExist(statErr) {
+			t.Fatalf("output file should not be created without selection")
+		}
+	})
+
+	t.Run("clipboard selection flag rejected with explicit root links", func(t *testing.T) {
+		outPath := filepath.Join(tempDir, "selection-rejected.md")
+		cmd := exec.Command(binPath, "--links", "dQw4w9WgXcQ", "--clipboard-selection", "all", "--out", outPath)
+		output, err := cmd.CombinedOutput()
+		if err == nil {
+			t.Fatalf("command should have failed with explicit links and selection flag:\n%s", output)
+		}
+		if !contains(string(output), "--clipboard-selection can only be used with the default clipboard workflow") {
+			t.Fatalf("error should explain selection flag scope:\n%s", output)
+		}
+		if _, statErr := os.Stat(outPath); !os.IsNotExist(statErr) {
+			t.Fatalf("output file should not be created after rejected selection flag")
+		}
+	})
+
+	t.Run("clipboard selection flag rejected with export command", func(t *testing.T) {
+		outPath := filepath.Join(tempDir, "selection-export-rejected.md")
+		cmd := exec.Command(binPath, "export", "--links", "dQw4w9WgXcQ", "--clipboard-selection", "all", "--out", outPath)
+		output, err := cmd.CombinedOutput()
+		if err == nil {
+			t.Fatalf("command should have failed with export command and selection flag:\n%s", output)
+		}
+		if !contains(string(output), "unknown flag: --clipboard-selection") {
+			t.Fatalf("error should explain selection flag is unavailable for export:\n%s", output)
+		}
+		if _, statErr := os.Stat(outPath); !os.IsNotExist(statErr) {
+			t.Fatalf("output file should not be created after rejected export selection flag")
+		}
+	})
+
+	t.Run("invalid clipboard selection flag fails before output", func(t *testing.T) {
+		dir := filepath.Join(tempDir, "clipboard-invalid-selection")
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		clipboardOut := filepath.Join(dir, "clipboard.md")
+		cmd := exec.Command(binPath, "--clipboard-selection", "one:0")
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(),
+			"YT_TRANSCRIPT_MD_TEST_CLIPBOARD=https://youtu.be/dQw4w9WgXcQ\nhttps://youtu.be/jNQXAC9IVRw",
+			"YT_TRANSCRIPT_MD_TEST_CLIPBOARD_OUT="+clipboardOut,
+		)
+		output, err := cmd.CombinedOutput()
+		if err == nil {
+			t.Fatalf("command should have failed with invalid selection flag:\n%s", output)
+		}
+		if !contains(string(output), "invalid video index") {
+			t.Fatalf("error should explain invalid selection flag:\n%s", output)
+		}
+		if _, statErr := os.Stat(filepath.Join(dir, "transcripts.md")); !os.IsNotExist(statErr) {
+			t.Fatalf("output file should not be created after invalid selection flag")
+		}
+	})
+
+	t.Run("out of range clipboard selection fails for single video", func(t *testing.T) {
+		dir := filepath.Join(tempDir, "clipboard-out-of-range-selection")
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		clipboardOut := filepath.Join(dir, "clipboard.md")
+		cmd := exec.Command(binPath, "--clipboard-selection", "one:2")
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(),
+			"YT_TRANSCRIPT_MD_TEST_CLIPBOARD=https://youtu.be/dQw4w9WgXcQ",
+			"YT_TRANSCRIPT_MD_TEST_CLIPBOARD_OUT="+clipboardOut,
+		)
+		output, err := cmd.CombinedOutput()
+		if err == nil {
+			t.Fatalf("command should have failed with out-of-range selection flag:\n%s", output)
+		}
+		if !contains(string(output), "video index 2 is out of range") {
+			t.Fatalf("error should explain out-of-range selection:\n%s", output)
+		}
+		if _, statErr := os.Stat(filepath.Join(dir, "transcripts.md")); !os.IsNotExist(statErr) {
+			t.Fatalf("output file should not be created after out-of-range selection flag")
+		}
+	})
+
 	t.Run("strict mode failure", func(t *testing.T) {
 		cmd := exec.Command(binPath, "export", "--links", "fail1234567", "--strict")
 		if err := cmd.Run(); err == nil {
@@ -138,6 +321,12 @@ func TestE2E_Help(t *testing.T) {
 		}
 		if clipboardIndex > flagsIndex {
 			t.Fatalf("clipboard workflow should appear before advanced flags:\n%s", help)
+		}
+		if !contains(help, "multiple YouTube videos") {
+			t.Fatalf("root help missing multi-link clipboard prompt language:\n%s", help)
+		}
+		if !contains(help, "--clipboard-selection") {
+			t.Fatalf("root help missing clipboard selection flag:\n%s", help)
 		}
 	})
 

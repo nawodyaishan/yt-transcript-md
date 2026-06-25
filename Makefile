@@ -1,4 +1,4 @@
-.PHONY: help tidy tidy-check mod-verify vet lint test build verify clean tag release
+.PHONY: help tidy tidy-check mod-verify vet lint test build run verify clean tag release
 
 help:
 	@echo "Available targets:"
@@ -9,6 +9,7 @@ help:
 	@echo "  lint       Run golangci-lint"
 	@echo "  test       Run tests"
 	@echo "  build      Build binary"
+	@echo "  run        Build and run binary (use ARGS=\"--help\")"
 	@echo "  verify     Run all quality checks"
 	@echo "  clean      Remove build artifacts"
 	@echo "  tag        Tag a new version (use V=v0.1.0 MSG=\"...\")"
@@ -34,6 +35,9 @@ test:
 
 build:
 	./scripts/build.sh
+
+run: build
+	./bin/yt-transcript-md $(ARGS)
 
 verify:
 	./scripts/verify.sh
