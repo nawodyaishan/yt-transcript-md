@@ -18,6 +18,7 @@ type exportOptions struct {
 	retries            int
 	retryDelaySeconds  float64
 	strict             bool
+	clipboardSelection string
 }
 
 var opts exportOptions
@@ -44,6 +45,7 @@ func init() {
 	rootCmd.AddCommand(exportCmd)
 	addExportFlags(exportCmd)
 	addExportFlags(rootCmd)
+	rootCmd.Flags().StringVar(&opts.clipboardSelection, "clipboard-selection", "", "Resolve multi-link clipboard input without prompting: all, one:<index>, or recent:<count>")
 
 	// Keep flag-based root export for compatibility, and use the clipboard
 	// workflow only for a true no-flag invocation.
@@ -51,9 +53,12 @@ func init() {
 	rootCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		// If a subcommand was specified, Execute will handle it.
 		if cmd.Flags().Changed("links") || cmd.Flags().Changed("input-file") {
+			if cmd.Flags().Changed("clipboard-selection") {
+				return errClipboardSelectionExplicitInput
+			}
 			return runExport()
 		}
-		if cmd.Flags().NFlag() == 0 && len(args) == 0 {
+		if (cmd.Flags().NFlag() == 0 || cmd.Flags().Changed("clipboard-selection")) && len(args) == 0 {
 			return runClipboardExport()
 		}
 		if originalRunE != nil {
@@ -88,8 +93,12 @@ func runClipboardExport() error {
 	provider := getProvider()
 	metadataProvider := getMetadataProvider()
 	clipboard := getClipboard()
+	selector, err := getClipboardSelector(opts.clipboardSelection)
+	if err != nil {
+		return err
+	}
 
-	return app.ExportClipboard(ctx, exportOptionsFromFlags(), clipboard, provider, metadataProvider, os.Stdout)
+	return app.ExportClipboard(ctx, exportOptionsFromFlags(), clipboard, selector, provider, metadataProvider, os.Stdout)
 }
 
 func exportOptionsFromFlags() app.ExportOptions {

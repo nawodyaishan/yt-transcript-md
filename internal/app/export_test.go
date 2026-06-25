@@ -76,6 +76,22 @@ func (f *fakeClipboard) WriteAll(text string) error {
 	return nil
 }
 
+type fakeSelector struct {
+	selection ClipboardSelection
+	err       error
+	calls     int
+	videos    []models.VideoInput
+}
+
+func (f *fakeSelector) Select(videos []models.VideoInput) (ClipboardSelection, error) {
+	f.calls++
+	f.videos = append([]models.VideoInput(nil), videos...)
+	if f.err != nil {
+		return ClipboardSelection{}, f.err
+	}
+	return f.selection, nil
+}
+
 func TestExport(t *testing.T) {
 	tempDir, err := os.MkdirTemp("", "yt-transcript-md-test-*")
 	if err != nil {
@@ -187,7 +203,7 @@ func TestExportClipboard(t *testing.T) {
 		}
 		opts := ExportOptions{Languages: "en", Out: outPath}
 
-		err := ExportClipboard(context.Background(), opts, clipboard, provider, metadataProvider, io.Discard)
+		err := ExportClipboard(context.Background(), opts, clipboard, nil, provider, metadataProvider, io.Discard)
 		if err != nil {
 			t.Fatalf("ExportClipboard() error = %v", err)
 		}
@@ -213,7 +229,7 @@ func TestExportClipboard(t *testing.T) {
 
 	t.Run("empty clipboard", func(t *testing.T) {
 		clipboard := &fakeClipboard{read: " \n\t "}
-		err := ExportClipboard(context.Background(), ExportOptions{}, clipboard, provider, nil, io.Discard)
+		err := ExportClipboard(context.Background(), ExportOptions{}, clipboard, nil, provider, nil, io.Discard)
 		if err == nil {
 			t.Fatal("ExportClipboard() should return error with empty clipboard")
 		}
@@ -227,7 +243,7 @@ func TestExportClipboard(t *testing.T) {
 		}
 		var log strings.Builder
 
-		err := ExportClipboard(context.Background(), ExportOptions{Out: outPath}, clipboard, provider, metadataProvider, &log)
+		err := ExportClipboard(context.Background(), ExportOptions{Out: outPath}, clipboard, nil, provider, metadataProvider, &log)
 		if err != nil {
 			t.Fatalf("ExportClipboard() error = %v", err)
 		}
@@ -300,7 +316,7 @@ func TestExportClipboard(t *testing.T) {
 		outPath := filepath.Join(badDir, "out.md")
 		clipboard := &fakeClipboard{read: "https://youtu.be/dQw4w9WgXcQ"}
 
-		err := ExportClipboard(context.Background(), ExportOptions{Out: outPath}, clipboard, provider, nil, io.Discard)
+		err := ExportClipboard(context.Background(), ExportOptions{Out: outPath}, clipboard, nil, provider, nil, io.Discard)
 		if err == nil {
 			t.Fatal("ExportClipboard() should return file write error")
 		}
@@ -316,12 +332,128 @@ func TestExportClipboard(t *testing.T) {
 			writeErr: errors.New("clipboard failed"),
 		}
 
-		err := ExportClipboard(context.Background(), ExportOptions{Out: outPath}, clipboard, provider, nil, io.Discard)
+		err := ExportClipboard(context.Background(), ExportOptions{Out: outPath}, clipboard, nil, provider, nil, io.Discard)
 		if err == nil {
 			t.Fatal("ExportClipboard() should return clipboard write error")
 		}
 		if _, statErr := os.Stat(outPath); statErr != nil {
 			t.Fatalf("output file should remain after clipboard failure: %v", statErr)
+		}
+	})
+
+	t.Run("multi video clipboard selection all", func(t *testing.T) {
+		outPath := filepath.Join(t.TempDir(), "all.md")
+		provider := &fakeProvider{
+			responses: map[string]models.TranscriptDocument{
+				"dQw4w9WgXcQ": {Video: models.VideoInput{Original: "https://youtu.be/dQw4w9WgXcQ", VideoID: "dQw4w9WgXcQ"}, Snippets: []models.TranscriptSnippet{{Text: "First"}}},
+				"jNQXAC9IVRw": {Video: models.VideoInput{Original: "https://youtu.be/jNQXAC9IVRw", VideoID: "jNQXAC9IVRw"}, Snippets: []models.TranscriptSnippet{{Text: "Second"}}},
+			},
+		}
+		clipboard := &fakeClipboard{read: "First https://youtu.be/dQw4w9WgXcQ second https://youtu.be/jNQXAC9IVRw"}
+		selector := &fakeSelector{selection: ClipboardSelection{Mode: ClipboardSelectionAll}}
+
+		err := ExportClipboard(context.Background(), ExportOptions{Out: outPath}, clipboard, selector, provider, nil, io.Discard)
+		if err != nil {
+			t.Fatalf("ExportClipboard() error = %v", err)
+		}
+		if selector.calls != 1 {
+			t.Fatalf("selector calls = %d, want 1", selector.calls)
+		}
+		if provider.calls["dQw4w9WgXcQ"] != 1 || provider.calls["jNQXAC9IVRw"] != 1 {
+			t.Fatalf("provider calls = %v, want both videos once", provider.calls)
+		}
+	})
+
+	t.Run("multi video clipboard selection one", func(t *testing.T) {
+		outPath := filepath.Join(t.TempDir(), "one.md")
+		provider := &fakeProvider{
+			responses: map[string]models.TranscriptDocument{
+				"dQw4w9WgXcQ": {Video: models.VideoInput{Original: "https://youtu.be/dQw4w9WgXcQ", VideoID: "dQw4w9WgXcQ"}, Snippets: []models.TranscriptSnippet{{Text: "First"}}},
+				"jNQXAC9IVRw": {Video: models.VideoInput{Original: "https://youtu.be/jNQXAC9IVRw", VideoID: "jNQXAC9IVRw"}, Snippets: []models.TranscriptSnippet{{Text: "Second"}}},
+			},
+		}
+		clipboard := &fakeClipboard{read: "https://youtu.be/dQw4w9WgXcQ\nhttps://youtu.be/jNQXAC9IVRw"}
+		selector := &fakeSelector{selection: ClipboardSelection{Mode: ClipboardSelectionOne, Index: 2}}
+
+		err := ExportClipboard(context.Background(), ExportOptions{Out: outPath}, clipboard, selector, provider, nil, io.Discard)
+		if err != nil {
+			t.Fatalf("ExportClipboard() error = %v", err)
+		}
+		if provider.calls["dQw4w9WgXcQ"] != 0 {
+			t.Fatalf("first video was fetched: calls = %v", provider.calls)
+		}
+		if provider.calls["jNQXAC9IVRw"] != 1 {
+			t.Fatalf("second video calls = %d, want 1", provider.calls["jNQXAC9IVRw"])
+		}
+		if contains(clipboard.wrote, "dQw4w9WgXcQ") {
+			t.Fatalf("clipboard output contains unselected video: %s", clipboard.wrote)
+		}
+	})
+
+	t.Run("multi video clipboard selection recent", func(t *testing.T) {
+		outPath := filepath.Join(t.TempDir(), "recent.md")
+		provider := &fakeProvider{
+			responses: map[string]models.TranscriptDocument{
+				"dQw4w9WgXcQ": {Video: models.VideoInput{Original: "https://youtu.be/dQw4w9WgXcQ", VideoID: "dQw4w9WgXcQ"}, Snippets: []models.TranscriptSnippet{{Text: "First"}}},
+				"jNQXAC9IVRw": {Video: models.VideoInput{Original: "https://youtu.be/jNQXAC9IVRw", VideoID: "jNQXAC9IVRw"}, Snippets: []models.TranscriptSnippet{{Text: "Second"}}},
+				"BaW_jenozKc": {Video: models.VideoInput{Original: "https://youtu.be/BaW_jenozKc", VideoID: "BaW_jenozKc"}, Snippets: []models.TranscriptSnippet{{Text: "Third"}}},
+			},
+		}
+		clipboard := &fakeClipboard{read: "https://youtu.be/dQw4w9WgXcQ\nhttps://youtu.be/jNQXAC9IVRw\nhttps://youtu.be/BaW_jenozKc"}
+		selector := &fakeSelector{selection: ClipboardSelection{Mode: ClipboardSelectionRecent, Count: 2}}
+
+		err := ExportClipboard(context.Background(), ExportOptions{Out: outPath}, clipboard, selector, provider, nil, io.Discard)
+		if err != nil {
+			t.Fatalf("ExportClipboard() error = %v", err)
+		}
+		if provider.calls["dQw4w9WgXcQ"] != 1 || provider.calls["jNQXAC9IVRw"] != 1 {
+			t.Fatalf("first two videos were not fetched once: calls = %v", provider.calls)
+		}
+		if provider.calls["BaW_jenozKc"] != 0 {
+			t.Fatalf("third video was fetched: calls = %v", provider.calls)
+		}
+	})
+
+	t.Run("multi video clipboard without selector fails before side effects", func(t *testing.T) {
+		outPath := filepath.Join(t.TempDir(), "none.md")
+		provider := &fakeProvider{}
+		metadataProvider := &fakeMetadataProvider{}
+		clipboard := &fakeClipboard{read: "https://youtu.be/dQw4w9WgXcQ\nhttps://youtu.be/jNQXAC9IVRw"}
+
+		err := ExportClipboard(context.Background(), ExportOptions{Out: outPath}, clipboard, nil, provider, metadataProvider, io.Discard)
+		if err == nil {
+			t.Fatal("ExportClipboard() should fail without selector for multi-video clipboard")
+		}
+		if provider.calls != nil || metadataProvider.calls != nil {
+			t.Fatalf("providers were called before selection: provider=%v metadata=%v", provider.calls, metadataProvider.calls)
+		}
+		if clipboard.wrote != "" {
+			t.Fatalf("clipboard was written after selection failure")
+		}
+		if _, statErr := os.Stat(outPath); !os.IsNotExist(statErr) {
+			t.Fatalf("output file was created after selection failure")
+		}
+	})
+
+	t.Run("multi video clipboard cancellation has no side effects", func(t *testing.T) {
+		outPath := filepath.Join(t.TempDir(), "cancel.md")
+		provider := &fakeProvider{}
+		metadataProvider := &fakeMetadataProvider{}
+		clipboard := &fakeClipboard{read: "https://youtu.be/dQw4w9WgXcQ\nhttps://youtu.be/jNQXAC9IVRw"}
+		selector := &fakeSelector{selection: ClipboardSelection{Mode: ClipboardSelectionCancel}}
+
+		err := ExportClipboard(context.Background(), ExportOptions{Out: outPath}, clipboard, selector, provider, metadataProvider, io.Discard)
+		if !errors.Is(err, ErrClipboardSelectionCanceled) {
+			t.Fatalf("ExportClipboard() error = %v, want canceled", err)
+		}
+		if provider.calls != nil || metadataProvider.calls != nil {
+			t.Fatalf("providers were called after cancellation: provider=%v metadata=%v", provider.calls, metadataProvider.calls)
+		}
+		if clipboard.wrote != "" {
+			t.Fatalf("clipboard was written after cancellation")
+		}
+		if _, statErr := os.Stat(outPath); !os.IsNotExist(statErr) {
+			t.Fatalf("output file was created after cancellation")
 		}
 	})
 }

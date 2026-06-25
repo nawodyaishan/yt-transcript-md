@@ -4,12 +4,15 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/nawodyaishan/yt-transcript-md/internal/models"
 )
 
 var videoIDPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{11}$`)
+var videoIDTokenPattern = regexp.MustCompile(`(^|[^a-zA-Z0-9_-])([a-zA-Z0-9_-]{11})([^a-zA-Z0-9_-]|$)`)
+var urlCandidatePattern = regexp.MustCompile(`https?://[^\s<>"']+`)
 
 var youtubeHosts = map[string]bool{
 	"youtube.com":       true,
@@ -102,6 +105,85 @@ func ParseVideoInputs(raw string) ([]models.VideoInput, error) {
 	}
 
 	return videos, nil
+}
+
+// ExtractClipboardVideoInputs extracts valid YouTube videos from arbitrary clipboard text.
+func ExtractClipboardVideoInputs(raw string) ([]models.VideoInput, error) {
+	candidates := clipboardCandidates(raw)
+	seen := make(map[string]bool)
+	var videos []models.VideoInput
+
+	for _, candidate := range candidates {
+		videoID, err := ExtractVideoID(candidate.value)
+		if err != nil {
+			continue
+		}
+		if seen[videoID] {
+			continue
+		}
+		seen[videoID] = true
+		videos = append(videos, models.VideoInput{
+			Original: candidate.value,
+			VideoID:  videoID,
+		})
+	}
+
+	if len(videos) == 0 {
+		return nil, fmt.Errorf("no valid YouTube links or video IDs provided")
+	}
+
+	return videos, nil
+}
+
+type clipboardCandidate struct {
+	index int
+	value string
+}
+
+func clipboardCandidates(raw string) []clipboardCandidate {
+	var candidates []clipboardCandidate
+	urlLocs := urlCandidatePattern.FindAllStringIndex(raw, -1)
+
+	for _, loc := range urlLocs {
+		value := cleanClipboardCandidate(raw[loc[0]:loc[1]])
+		if value != "" {
+			candidates = append(candidates, clipboardCandidate{index: loc[0], value: value})
+		}
+	}
+
+	for _, match := range videoIDTokenPattern.FindAllStringSubmatchIndex(raw, -1) {
+		start := match[4]
+		end := match[5]
+		if start >= 0 && end >= 0 {
+			if insideAnySpan(start, urlLocs) {
+				continue
+			}
+			candidates = append(candidates, clipboardCandidate{index: start, value: raw[start:end]})
+		}
+	}
+
+	sort.SliceStable(candidates, func(i, j int) bool {
+		return candidates[i].index < candidates[j].index
+	})
+
+	return candidates
+}
+
+func insideAnySpan(index int, spans [][]int) bool {
+	for _, span := range spans {
+		if index >= span[0] && index < span[1] {
+			return true
+		}
+	}
+	return false
+}
+
+func cleanClipboardCandidate(value string) string {
+	value = strings.TrimSpace(value)
+	value = strings.Trim(value, "<>")
+	value = strings.TrimRight(value, ".,;:!?)`]}")
+	value = strings.TrimLeft(value, "([`{")
+	return value
 }
 
 func validateVideoID(candidate string, original string) (string, error) {

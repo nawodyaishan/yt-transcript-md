@@ -14,10 +14,17 @@ var rootCmd = &cobra.Command{
 
 Copy a YouTube link or video ID, run yt-transcript-md with no arguments, and
 the command saves transcripts.md while also copying the generated Markdown back
-to your clipboard. Use flags or the export command for explicit file and batch
-workflows.`,
+to your clipboard. If your clipboard contains multiple YouTube videos, the
+default workflow asks whether to process one video, all videos, or the first N
+videos from clipboard order.
+
+Use --clipboard-selection for non-interactive clipboard runs, or use flags and
+the export command for explicit file and batch workflows.`,
 	Example: `  # Default workflow: read clipboard, save transcripts.md, copy Markdown back
   yt-transcript-md
+
+  # Non-interactive clipboard batch selection
+  yt-transcript-md --clipboard-selection recent:2
 
   # Advanced workflow: write a specific link to a chosen file
   yt-transcript-md --links "https://youtu.be/dQw4w9WgXcQ" --out notes.md

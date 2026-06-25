@@ -60,7 +60,7 @@ func Export(ctx context.Context, opts ExportOptions, provider transcript.Provide
 }
 
 // ExportClipboard reads input from the clipboard, saves Markdown, and copies it back.
-func ExportClipboard(ctx context.Context, opts ExportOptions, clipboard Clipboard, provider transcript.Provider, metadataProvider metadata.Provider, log io.Writer) error {
+func ExportClipboard(ctx context.Context, opts ExportOptions, clipboard Clipboard, selector ClipboardSelector, provider transcript.Provider, metadataProvider metadata.Provider, log io.Writer) error {
 	if clipboard == nil {
 		return fmt.Errorf("clipboard is not configured")
 	}
@@ -75,7 +75,12 @@ func ExportClipboard(ctx context.Context, opts ExportOptions, clipboard Clipboar
 	}
 
 	reporter := NewReporter(log)
-	result, err := renderExport(ctx, rawInput, opts, provider, metadataProvider, reporter)
+	videos, err := selectedClipboardVideos(rawInput, selector)
+	if err != nil {
+		return err
+	}
+
+	result, err := renderVideos(ctx, videos, opts, provider, metadataProvider, reporter)
 	if result.Markdown != "" {
 		outPath := outputPath(opts.Out)
 		if writeErr := writeOutputFile(outPath, result.Markdown); writeErr != nil {
@@ -103,6 +108,10 @@ func renderExport(ctx context.Context, rawInput string, opts ExportOptions, prov
 		return exportResult{}, fmt.Errorf("no valid YouTube links or video IDs provided")
 	}
 
+	return renderVideos(ctx, videos, opts, provider, metadataProvider, reporter)
+}
+
+func renderVideos(ctx context.Context, videos []models.VideoInput, opts ExportOptions, provider transcript.Provider, metadataProvider metadata.Provider, reporter *Reporter) (exportResult, error) {
 	languagePriority := parseLanguages(opts.Languages)
 	fetchOpts := transcript.FetchOptions{
 		Languages:          languagePriority,
@@ -167,6 +176,31 @@ func renderExport(ctx context.Context, rawInput string, opts ExportOptions, prov
 	}
 
 	return result, nil
+}
+
+func selectedClipboardVideos(rawInput string, selector ClipboardSelector) ([]models.VideoInput, error) {
+	videos, err := input.ExtractClipboardVideoInputs(rawInput)
+	if err != nil {
+		return nil, fmt.Errorf("input error: %w", err)
+	}
+	if len(videos) <= 1 {
+		if fixedSelector, ok := selector.(FixedClipboardSelector); ok {
+			return ApplyClipboardSelection(videos, fixedSelector.FixedSelection())
+		}
+		return videos, nil
+	}
+	if selector == nil {
+		return nil, fmt.Errorf("clipboard selection is required for %d detected videos", len(videos))
+	}
+	selection, err := selector.Select(videos)
+	if err != nil {
+		return nil, err
+	}
+	selected, err := ApplyClipboardSelection(videos, selection)
+	if err != nil {
+		return nil, err
+	}
+	return selected, nil
 }
 
 func outputPath(path string) string {

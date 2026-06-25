@@ -78,3 +78,60 @@ func TestParseVideoInputs(t *testing.T) {
 		t.Errorf("ParseVideoInputs() = %v, want %v", got, want)
 	}
 }
+
+func TestExtractClipboardVideoInputs(t *testing.T) {
+	tests := []struct {
+		name    string
+		raw     string
+		want    []models.VideoInput
+		wantErr bool
+	}{
+		{
+			name: "extracts links from prose",
+			raw:  "Watch this https://youtu.be/dQw4w9WgXcQ and then https://www.youtube.com/watch?v=jNQXAC9IVRw.",
+			want: []models.VideoInput{
+				{Original: "https://youtu.be/dQw4w9WgXcQ", VideoID: "dQw4w9WgXcQ"},
+				{Original: "https://www.youtube.com/watch?v=jNQXAC9IVRw", VideoID: "jNQXAC9IVRw"},
+			},
+		},
+		{
+			name: "extracts raw IDs from prose",
+			raw:  "IDs: dQw4w9WgXcQ then jNQXAC9IVRw",
+			want: []models.VideoInput{
+				{Original: "dQw4w9WgXcQ", VideoID: "dQw4w9WgXcQ"},
+				{Original: "jNQXAC9IVRw", VideoID: "jNQXAC9IVRw"},
+			},
+		},
+		{
+			name: "deduplicates after URL and raw ID extraction",
+			raw:  "https://youtu.be/dQw4w9WgXcQ dQw4w9WgXcQ",
+			want: []models.VideoInput{
+				{Original: "https://youtu.be/dQw4w9WgXcQ", VideoID: "dQw4w9WgXcQ"},
+			},
+		},
+		{
+			name: "ignores unsupported URLs",
+			raw:  "https://example.com/not-youtube https://youtu.be/dQw4w9WgXcQ",
+			want: []models.VideoInput{
+				{Original: "https://youtu.be/dQw4w9WgXcQ", VideoID: "dQw4w9WgXcQ"},
+			},
+		},
+		{
+			name:    "no valid videos",
+			raw:     "plain prose https://example.com/not-youtube",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ExtractClipboardVideoInputs(tt.raw)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("ExtractClipboardVideoInputs() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("ExtractClipboardVideoInputs() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
