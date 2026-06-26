@@ -1,4 +1,4 @@
-.PHONY: help tidy tidy-check mod-verify vet lint test build run verify clean tag release
+.PHONY: help tidy tidy-check mod-verify vet lint test test-docker build run verify clean tag release
 
 help:
 	@echo "Available targets:"
@@ -8,6 +8,7 @@ help:
 	@echo "  vet        Run go vet"
 	@echo "  lint       Run golangci-lint"
 	@echo "  test       Run tests"
+	@echo "  test-docker Run Docker Linux e2e tests"
 	@echo "  build      Build binary"
 	@echo "  run        Build and run binary (use ARGS=\"--help\")"
 	@echo "  verify     Run all quality checks"
@@ -32,6 +33,9 @@ lint:
 
 test:
 	./scripts/test.sh
+
+test-docker:
+	./scripts/test-docker.sh
 
 build:
 	./scripts/build.sh
