@@ -8,7 +8,8 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "yt-transcript-md",
+	Use:   "yt-transcript-md [URL ...]",
+	Args:  cobra.ArbitraryArgs,
 	Short: "Copy a YouTube link, run one command, get a Markdown transcript",
 	Long: `Clipboard-first YouTube transcript capture.
 
@@ -18,11 +19,16 @@ to your clipboard. In an interactive terminal, the default workflow can also
 scan supported clipboard-history managers for recently copied YouTube links and
 show a searchable multi-select TUI before fetching transcripts.
 
-Use --history-source and --history-limit to control clipboard-history scanning.
-Use --clipboard-selection for non-interactive clipboard runs, or use flags and the
-export command for explicit file and batch workflows.`,
+Pass one or more YouTube links as positional arguments to fetch transcripts
+without touching the clipboard. Use --history-source and --history-limit to
+control clipboard-history scanning. Use --clipboard-selection for
+non-interactive clipboard runs, or use flags and the export command for
+explicit file and batch workflows.`,
 	Example: `  # Default workflow: read clipboard, save transcripts.md, copy Markdown back
   yt-transcript-md
+
+  # Fetch transcripts from links passed directly as arguments
+  yt-transcript-md https://youtu.be/dQw4w9WgXcQ https://youtu.be/jNQXAC9IVRw
 
   # Non-interactive clipboard batch selection
   yt-transcript-md --clipboard-selection recent:2

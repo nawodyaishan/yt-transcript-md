@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/nawodyaishan/yt-transcript-md/internal/app"
 	"github.com/nawodyaishan/yt-transcript-md/internal/history"
@@ -30,19 +31,26 @@ type exportOptions struct {
 var opts exportOptions
 
 var exportCmd = &cobra.Command{
-	Use:   "export",
+	Use:   "export [URL ...]",
 	Short: "Advanced file and batch transcript export",
 	Long: `Advanced file and batch transcript export.
 
-Fetch transcripts from explicit links, video IDs, or an input file and
-write the generated Markdown to a chosen output path.
+Fetch transcripts from explicit links, video IDs, positional URL arguments, or
+an input file and write the generated Markdown to a chosen output path.
 
 For the simplest workflow, copy a YouTube link and run yt-transcript-md with no
 arguments. This export command is for explicit file destinations, batch input,
 and automation.`,
-	Example: `  yt-transcript-md export --links "https://youtu.be/dQw4w9WgXcQ" --out notes.md
+	Example: `  yt-transcript-md export https://youtu.be/dQw4w9WgXcQ --out notes.md
+  yt-transcript-md export --links "https://youtu.be/dQw4w9WgXcQ" --out notes.md
   yt-transcript-md export --input-file links.txt --out transcripts.md`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) > 0 {
+			if err := rejectPositionalArgConflicts(cmd); err != nil {
+				return err
+			}
+			opts.links = strings.Join(args, ",")
+		}
 		return runExport()
 	},
 }
@@ -60,14 +68,20 @@ func init() {
 	// workflow only for a true no-flag invocation.
 	originalRunE := rootCmd.RunE
 	rootCmd.RunE = func(cmd *cobra.Command, args []string) error {
-		// If a subcommand was specified, Execute will handle it.
+		if len(args) > 0 {
+			if err := rejectPositionalArgConflicts(cmd); err != nil {
+				return err
+			}
+			opts.links = strings.Join(args, ",")
+			return runExport()
+		}
 		if cmd.Flags().Changed("links") || cmd.Flags().Changed("input-file") {
 			if err := rejectClipboardOnlyFlags(cmd); err != nil {
 				return err
 			}
 			return runExport()
 		}
-		if isClipboardInvocation(cmd) && len(args) == 0 {
+		if isClipboardInvocation(cmd) {
 			return runClipboardExport()
 		}
 		if originalRunE != nil {
@@ -164,6 +178,21 @@ func rejectClipboardOnlyFlags(cmd *cobra.Command) error {
 	default:
 		return nil
 	}
+}
+
+func rejectPositionalArgConflicts(cmd *cobra.Command) error {
+	if cmd.Flags().Changed("links") {
+		return fmt.Errorf("positional URL arguments cannot be combined with --links; pass links as arguments or use --links, not both")
+	}
+	if cmd.Flags().Changed("input-file") {
+		return fmt.Errorf("positional URL arguments cannot be combined with --input-file; pass links as arguments or use --input-file, not both")
+	}
+	for _, name := range []string{"clipboard-selection", "history-source", "history-limit", "no-history"} {
+		if f := cmd.Flags().Lookup(name); f != nil && cmd.Flags().Changed(name) {
+			return fmt.Errorf("positional URL arguments cannot be combined with --%s; clipboard workflow flags apply only to the default no-argument invocation", name)
+		}
+	}
+	return nil
 }
 
 func isClipboardInvocation(cmd *cobra.Command) bool {

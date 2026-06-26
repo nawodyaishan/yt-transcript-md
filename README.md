@@ -174,6 +174,8 @@ Pre-built binaries for macOS, Linux, and Windows are available on the [Releases 
 
 ### From Source
 
+Requires Go `1.25.11` or newer.
+
 ```bash
 git clone https://github.com/nawodyaishan/yt-transcript-md.git
 cd yt-transcript-md
@@ -181,6 +183,13 @@ make build
 ```
 
 The compiled binary will be placed at `bin/yt-transcript-md`.
+
+Build and run locally in one step:
+
+```bash
+make run
+make run ARGS="--help"
+```
 
 ## Command Line Flags
 
@@ -219,6 +228,8 @@ Clipboard mode uses native clipboard tools:
 
 ## Development
 
+This project is built and scanned with the Go version declared in `go.mod`. Keep the local toolchain at Go `1.25.11` or newer so standard-library vulnerability scans use the patched runtime.
+
 Run all quality checks:
 
 ```bash
@@ -229,6 +240,18 @@ Run the Go test suite directly:
 
 ```bash
 go test ./...
+```
+
+Run the vulnerability scan used by CI and release workflows:
+
+```bash
+govulncheck ./...
+```
+
+If your local Go installation is newer but `govulncheck` has toolchain-loading issues, run the scan with the project-pinned patched toolchain:
+
+```bash
+GOTOOLCHAIN=go1.25.11 govulncheck ./...
 ```
 
 ## License

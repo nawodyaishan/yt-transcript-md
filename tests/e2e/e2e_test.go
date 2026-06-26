@@ -398,6 +398,114 @@ func TestE2E_Export(t *testing.T) {
 	})
 }
 
+func TestE2E_PositionalArgs(t *testing.T) {
+	tempDir := t.TempDir()
+
+	t.Run("single positional URL via root command", func(t *testing.T) {
+		outPath := filepath.Join(tempDir, "single.md")
+		cmd := exec.Command(binPath, "https://youtu.be/dQw4w9WgXcQ", "--out", outPath)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("command failed: %v\n%s", err, output)
+		}
+		content, err := os.ReadFile(outPath)
+		if err != nil {
+			t.Fatalf("output file was not created: %v", err)
+		}
+		if !contains(string(content), "Video `dQw4w9WgXcQ`") {
+			t.Errorf("output missing video ID:\n%s", content)
+		}
+	})
+
+	t.Run("multiple positional URLs via root command", func(t *testing.T) {
+		outPath := filepath.Join(tempDir, "multi.md")
+		cmd := exec.Command(binPath, "https://youtu.be/dQw4w9WgXcQ", "https://youtu.be/jNQXAC9IVRw", "--out", outPath)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("command failed: %v\n%s", err, output)
+		}
+		content, err := os.ReadFile(outPath)
+		if err != nil {
+			t.Fatalf("output file was not created: %v", err)
+		}
+		if !contains(string(content), "Video `dQw4w9WgXcQ`") || !contains(string(content), "Video `jNQXAC9IVRw`") {
+			t.Errorf("output missing one or more video IDs:\n%s", content)
+		}
+	})
+
+	t.Run("positional URL via export subcommand", func(t *testing.T) {
+		outPath := filepath.Join(tempDir, "export-positional.md")
+		cmd := exec.Command(binPath, "export", "https://youtu.be/dQw4w9WgXcQ", "--out", outPath)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("command failed: %v\n%s", err, output)
+		}
+		content, err := os.ReadFile(outPath)
+		if err != nil {
+			t.Fatalf("output file was not created: %v", err)
+		}
+		if !contains(string(content), "Video `dQw4w9WgXcQ`") {
+			t.Errorf("output missing video ID:\n%s", content)
+		}
+	})
+
+	t.Run("positional URL conflicts with --links", func(t *testing.T) {
+		cmd := exec.Command(binPath, "https://youtu.be/dQw4w9WgXcQ", "--links", "jNQXAC9IVRw")
+		output, err := cmd.CombinedOutput()
+		if err == nil {
+			t.Fatalf("command should have failed: %s", output)
+		}
+		if !contains(string(output), "--links") {
+			t.Errorf("error should mention --links:\n%s", output)
+		}
+	})
+
+	t.Run("positional URL conflicts with --input-file", func(t *testing.T) {
+		cmd := exec.Command(binPath, "https://youtu.be/dQw4w9WgXcQ", "--input-file", "links.txt")
+		output, err := cmd.CombinedOutput()
+		if err == nil {
+			t.Fatalf("command should have failed: %s", output)
+		}
+		if !contains(string(output), "--input-file") {
+			t.Errorf("error should mention --input-file:\n%s", output)
+		}
+	})
+
+	t.Run("positional URL conflicts with clipboard workflow flag", func(t *testing.T) {
+		cmd := exec.Command(binPath, "https://youtu.be/dQw4w9WgXcQ", "--history-source", "copyq")
+		output, err := cmd.CombinedOutput()
+		if err == nil {
+			t.Fatalf("command should have failed: %s", output)
+		}
+		if !contains(string(output), "--history-source") {
+			t.Errorf("error should mention --history-source:\n%s", output)
+		}
+	})
+
+	t.Run("duplicate positional URLs are deduplicated", func(t *testing.T) {
+		outPath := filepath.Join(tempDir, "dedup.md")
+		cmd := exec.Command(binPath, "https://youtu.be/dQw4w9WgXcQ", "https://youtu.be/dQw4w9WgXcQ", "--out", outPath)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("command failed: %v\n%s", err, output)
+		}
+		content, err := os.ReadFile(outPath)
+		if err != nil {
+			t.Fatalf("output file was not created: %v", err)
+		}
+		if count := strings.Count(string(content), "Video `dQw4w9WgXcQ`"); count != 1 {
+			t.Errorf("expected video to appear once, got %d times:\n%s", count, content)
+		}
+	})
+
+	t.Run("invalid positional argument fails clearly", func(t *testing.T) {
+		cmd := exec.Command(binPath, "not-a-youtube-link-at-all")
+		output, err := cmd.CombinedOutput()
+		if err == nil {
+			t.Fatalf("command should have failed: %s", output)
+		}
+		if !contains(string(output), "input error") {
+			t.Errorf("error should describe input problem:\n%s", output)
+		}
+	})
+}
+
 func TestE2E_Help(t *testing.T) {
 	t.Run("root help leads with clipboard workflow", func(t *testing.T) {
 		cmd := exec.Command(binPath, "--help")
