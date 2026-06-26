@@ -7,6 +7,12 @@ Copy one or more YouTube links. Run one command. Get clean Markdown transcripts 
 
 `yt-transcript-md` is a clipboard-first CLI for turning YouTube captions into Markdown notes for research, archiving, and LLM workflows. It fetches existing YouTube transcripts; it does not download audio or run speech-to-text.
 
+You can also pass links directly as arguments without touching the clipboard:
+
+```bash
+yt-transcript-md https://youtu.be/dQw4w9WgXcQ https://youtu.be/jNQXAC9IVRw
+```
+
 ## Quick Start
 
 Copy a YouTube link or video ID, then run:
@@ -130,6 +136,28 @@ History scanning is local-only. The tool extracts YouTube links locally, shows o
 
 ## Advanced Workflows
 
+### Positional URL arguments
+
+Pass one or more YouTube links or video IDs directly as arguments. The clipboard is not read or written:
+
+```bash
+# Single video
+yt-transcript-md https://youtu.be/dQw4w9WgXcQ
+
+# Multiple videos — space-separated, processed in argument order
+yt-transcript-md https://youtu.be/dQw4w9WgXcQ https://youtu.be/jNQXAC9IVRw
+
+# Write to a specific file
+yt-transcript-md https://youtu.be/dQw4w9WgXcQ --out notes.md
+
+# Works with the export subcommand too
+yt-transcript-md export https://youtu.be/dQw4w9WgXcQ --out notes.md
+```
+
+Duplicate links are deduplicated by video ID. Positional arguments cannot be combined with `--links`, `--input-file`, or clipboard workflow flags (`--clipboard-selection`, `--history-source`, `--history-limit`, `--no-history`).
+
+### Explicit links flag
+
 Write a specific link to a chosen file:
 
 ```bash
@@ -193,11 +221,11 @@ make run ARGS="--help"
 
 ## Command Line Flags
 
-With no flags, `yt-transcript-md` runs the clipboard workflow. Use root-level input flags or the `export` command for explicit file and batch workflows.
+With no flags, `yt-transcript-md` runs the clipboard workflow. Pass YouTube links as positional arguments to bypass the clipboard entirely. Use root-level input flags or the `export` command for explicit file and batch workflows.
 
 | Flag | Short | Default | Description |
 | :--- | :---: | :--- | :--- |
-| `--links` | `-l` | | Comma-separated YouTube links or video IDs. |
+| `--links` | `-l` | | Comma-separated YouTube links or video IDs. Cannot be combined with positional arguments. |
 | `--input-file` | `-f` | | Text file containing YouTube links or IDs. |
 | `--out` | `-o` | `transcripts.md` | Markdown output path. |
 | `--clipboard-selection` | | | Resolve multi-link clipboard input without prompting: `all`, `one:<index>`, or `recent:<count>`. |
